@@ -1375,7 +1375,7 @@ var applyNotchToggle = func(on bool) error {
 	}
 	_, err := notch.Launch(exeOrEmpty())
 	if errors.Is(err, notch.ErrNotInstalled) {
-		return fmt.Errorf("Saved, but VibeNotch.app isn't installed yet. Build it with: macos/VibeNotch/build-app.sh --install")
+		return fmt.Errorf("Saved, but VibeNotch.app isn't installed yet. Install it with: vibe-rpc notch install")
 	}
 	return err
 }

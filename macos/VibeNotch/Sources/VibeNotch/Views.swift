@@ -281,16 +281,56 @@ struct ExpandedPanel: View {
     }
 }
 
+/// Native vector rendering of the vibe-rpc double-V + presence-dot icon.
 struct BrandMark: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(LinearGradient(colors: [.white, Color(white: 0.8)], startPoint: .topLeading, endPoint: .bottomTrailing))
-            Image(systemName: "chevron.down")
-                .font(.system(size: 9, weight: .black))
-                .foregroundStyle(.black)
+                .fill(LinearGradient(
+                    colors: [Color(red: 0.11, green: 0.12, blue: 0.15), Color(red: 0.04, green: 0.05, blue: 0.06)],
+                    startPoint: .top, endPoint: .bottom
+                ))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.24), lineWidth: 0.75)
+                )
+            Canvas { ctx, size in
+                let w = size.width
+                let h = size.height
+
+                // Inner echo V
+                var inner = Path()
+                inner.move(to: CGPoint(x: w * 0.398, y: h * 0.295))
+                inner.addLine(to: CGPoint(x: w * 0.500, y: h * 0.525))
+                inner.addLine(to: CGPoint(x: w * 0.602, y: h * 0.295))
+                ctx.stroke(
+                    inner,
+                    with: .color(Color.white.opacity(0.55)),
+                    style: StrokeStyle(lineWidth: w * 0.075, lineCap: .round, lineJoin: .round)
+                )
+
+                // Outer platinum V
+                var outer = Path()
+                outer.move(to: CGPoint(x: w * 0.265, y: h * 0.315))
+                outer.addLine(to: CGPoint(x: w * 0.500, y: h * 0.770))
+                outer.addLine(to: CGPoint(x: w * 0.735, y: h * 0.315))
+                ctx.stroke(
+                    outer,
+                    with: .linearGradient(
+                        Gradient(colors: [.white, Color(white: 0.74)]),
+                        startPoint: CGPoint(x: w * 0.3, y: h * 0.3),
+                        endPoint: CGPoint(x: w * 0.6, y: h * 0.8)
+                    ),
+                    style: StrokeStyle(lineWidth: w * 0.125, lineCap: .round, lineJoin: .round)
+                )
+
+                // Presence spark dot
+                let r = w * 0.072
+                let dot = CGRect(x: w * 0.500 - r, y: h * 0.215 - r, width: r * 2, height: r * 2)
+                ctx.fill(Path(ellipseIn: dot), with: .color(.white))
+            }
         }
-        .frame(width: 16, height: 16)
+        .frame(width: 18, height: 18)
     }
 }
 

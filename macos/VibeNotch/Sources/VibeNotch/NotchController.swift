@@ -26,9 +26,23 @@ final class NotchPanel: NSPanel {
 }
 
 /// Delivers the very first click to SwiftUI instead of spending it on
-/// focusing the window, so buttons work on the first try.
+/// focusing the window, and lets clicks outside the currently visible notch /
+/// alert silhouette pass straight through the transparent panel to apps below.
 final class FirstClickHostingView<Content: View>: NSHostingView<Content> {
+    var visibleSize: () -> CGSize = { .zero }
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let size = visibleSize()
+        guard size.width > 0, size.height > 0 else { return nil }
+        let local = convert(point, from: superview)
+        let x = (bounds.width - size.width) / 2
+        let y = isFlipped ? 0 : (bounds.height - size.height)
+        let visible = CGRect(x: x, y: y, width: size.width, height: size.height)
+        guard visible.contains(local) else { return nil }
+        return super.hitTest(point)
+    }
 }
 
 /// A transient usage-limit warning shown when a 5h or weekly window crosses
@@ -107,7 +121,12 @@ final class NotchController: ObservableObject {
             )]
         }
         let root = NotchRootView(controller: self, feed: feed)
-        panel.contentView = FirstClickHostingView(rootView: root)
+        let hosting = FirstClickHostingView(rootView: root)
+        hosting.visibleSize = { [weak self] in
+            guard let self else { return .zero }
+            return self.mode.size(for: self.geometry)
+        }
+        panel.contentView = hosting
         layoutPanel()
         panel.orderFrontRegardless()
 

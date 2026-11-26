@@ -11,7 +11,7 @@ import (
 )
 
 // ErrNotInstalled means VibeNotch.app couldn't be found.
-var ErrNotInstalled = errors.New("VibeNotch.app not found in ~/Applications or /Applications; build it with: macos/VibeNotch/build-app.sh --install")
+var ErrNotInstalled = errors.New("VibeNotch.app not found in ~/Applications or /Applications; install it with: vibe-rpc notch install")
 
 // Supported reports whether VibeNotch can run on this OS.
 func Supported() bool { return runtime.GOOS == "darwin" }

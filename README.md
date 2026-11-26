@@ -91,9 +91,11 @@ When Claude Code or Antigravity needs a permission or asks you a question, the n
 The usage bars show real 5-hour session and weekly plan limits (with reset times) for both **Claude Code** (Pro, Max and Ultra) and **Antigravity CLI** (auto-switching between your Gemini and 3P pools based on the active model). Both CLIs share quotas only with their status line, so turn on **Claude Code usage limits** and/or **Antigravity CLI usage limits** in Settings (neither replaces an existing custom status line, and Antigravity stacks `vibe-rpc statusline` beneath its built-in bar). Until Antigravity limits are enabled, its bar falls back to active time in the rolling 5-hour window.
 
 ```bash
-macos/VibeNotch/build-app.sh --install   # builds VibeNotch.app into ~/Applications (needs Xcode)
+vibe-rpc notch install                   # downloads VibeNotch.app into ~/Applications (no Xcode needed)
 vibe-rpc notch                           # turn it on (or use the switch in Settings)
 vibe-rpc notch off                       # turn it off
+# or build from source (needs Xcode):
+macos/VibeNotch/build-app.sh --install
 ```
 
 While it's on, the daemon keeps it running, so it comes back at login. Right-click the notch for **Settings…** or **Turn Off VibeNotch**. It needs no Accessibility or Screen Recording permissions, only takes clicks while it's open, and works on Macs without a notch (it sits at the top center of the screen).
@@ -119,7 +121,7 @@ While it's on, the daemon keeps it running, so it comes back at login. Right-cli
 | `vibe-rpc mcp [install\|uninstall]` | Stdio MCP server / Antigravity registration |
 | `vibe-rpc start\|stop\|restart\|logs` | Daemon controls |
 | `vibe-rpc upgrade [--check]` | Update to the latest GitHub release |
-| `vibe-rpc notch [on\|off]` | Turn VibeNotch, the live status panel in the MacBook notch, on or off (macOS) |
+| `vibe-rpc notch [on\|off\|install]` | Install or toggle VibeNotch, the live status panel in the MacBook notch (macOS) |
 | `vibe-rpc uninstall` | Remove hooks, MCP config, autostart, and stop daemon |
 
 ## Key Go Libraries

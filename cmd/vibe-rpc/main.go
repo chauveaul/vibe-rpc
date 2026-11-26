@@ -880,17 +880,44 @@ func main() {
 		},
 	}
 	notchCmd := &cobra.Command{
-		Use:       "notch [on|off]",
-		Short:     "Turn VibeNotch, the live status panel in your MacBook's notch, on or off (macOS)",
+		Use:       "notch [on|off|install]",
+		Short:     "Install or toggle VibeNotch, the live status panel in your MacBook's notch (macOS)",
 		Args:      cobra.MaximumNArgs(1),
-		ValidArgs: []string{"on", "off"},
+		ValidArgs: []string{"on", "off", "install"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !notch.Supported() {
 				return fmt.Errorf("VibeNotch is macOS-only")
 			}
+			if len(args) == 1 && args[0] == "install" {
+				ctx, cancel := context.WithTimeout(cmd.Context(), 3*time.Minute)
+				defer cancel()
+				wasRunning := notch.Running()
+				if wasRunning {
+					notch.Quit()
+				}
+				fmt.Println("Downloading latest VibeNotch.app from GitHub Releases…")
+				res, err := notch.InstallLatest(ctx, notch.InstallOptions{})
+				if err != nil {
+					return err
+				}
+				if res.Verified {
+					fmt.Println("Checksum verified.")
+				}
+				fmt.Printf("Installed VibeNotch %s to %s\n", res.Version, res.AppPath)
+				if wasRunning || config.Load().Notch.Enabled {
+					if exe, err := os.Executable(); err == nil {
+						if _, err := notch.Launch(install.StableBinaryPath(exe)); err == nil {
+							fmt.Println("VibeNotch relaunched. Hover under the notch to open it.")
+						}
+					}
+				} else {
+					fmt.Println("Run `vibe-rpc notch` to turn it on.")
+				}
+				return nil
+			}
 			on := len(args) == 0 || args[0] == "on"
 			if len(args) == 1 && args[0] != "on" && args[0] != "off" {
-				return fmt.Errorf("use `vibe-rpc notch on` or `vibe-rpc notch off`")
+				return fmt.Errorf("use `vibe-rpc notch on`, `vibe-rpc notch off`, or `vibe-rpc notch install`")
 			}
 			if err := setNotchEnabled(on); err != nil {
 				return err

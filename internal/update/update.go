@@ -194,6 +194,17 @@ func PickAsset(r Release, goos, goarch string) (Asset, error) {
 	return Asset{}, fmt.Errorf("release %s has no build for %s/%s (looked for %s)", r.Tag, goos, goarch, strings.Join(want, ", "))
 }
 
+// FindAsset returns the named asset from r if present.
+func FindAsset(r Release, name string) (Asset, bool) { return findAsset(r, name) }
+
+// Download fetches an asset's bytes with the client's size limit and timeouts.
+func (c Client) Download(ctx context.Context, a Asset) ([]byte, error) { return c.download(ctx, a) }
+
+// ExpectedSum looks up name's SHA-256 hex digest in a sha256sum-style file.
+func ExpectedSum(checksums []byte, name string) (string, error) {
+	return expectedSum(checksums, name)
+}
+
 func findAsset(r Release, name string) (Asset, bool) {
 	for _, a := range r.Assets {
 		if a.Name == name {

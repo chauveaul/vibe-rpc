@@ -177,8 +177,11 @@ func (c Config) Clone() Config {
 }
 
 const (
-	DefaultClientID   = "1575595772760559656"
-	LegacyClientID    = "1506443909406920948"
+	DefaultClientID = "1575595772760559656"
+	LegacyClientID  = "1506443909406920948"
+	// GifAssetVersion is appended as ?v= to hosted GIF URLs; bump it whenever the
+	// GIFs change or Discord caches a broken fetch.
+	GifAssetVersion   = "2"
 	DefaultGifBaseURL = "https://cdn.jsdelivr.net/gh/chauveaul/vibe-rpc@main/internal/server/assets/gifs"
 )
 

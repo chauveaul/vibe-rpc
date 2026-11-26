@@ -440,7 +440,9 @@ func ResolveDiscordImageKey(cfg config.Config, source, status, model string) str
 				"https://cdn.jsdelivr.net/gh/chauveaul/agy-rpc@main/internal/server/assets/gifs":
 				base = config.DefaultGifBaseURL
 			}
-			return base + "/" + file
+			// Version query busts Discord's media-proxy cache (it remembers failed
+			// fetches per URL, e.g. 404s served while the repo was being renamed).
+			return base + "/" + file + "?v=" + config.GifAssetVersion
 		}
 		if cfg.ClientID != "" && cfg.ClientID != config.DefaultClientID {
 			return strings.TrimSuffix(file, ".gif")

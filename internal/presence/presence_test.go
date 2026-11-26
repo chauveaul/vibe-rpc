@@ -91,19 +91,19 @@ func TestComputeActiveSources(t *testing.T) {
 func TestResolveDiscordImageKey(t *testing.T) {
 	cfg := config.Default()
 	gotAgy := ResolveDiscordImageKey(cfg, "antigravity", "working", "gemini-4-neon-high")
-	wantAgy := config.DefaultGifBaseURL + "/agy-working.gif"
+	wantAgy := config.DefaultGifBaseURL + "/agy-working.gif?v=" + config.GifAssetVersion
 	if gotAgy != wantAgy {
 		t.Fatalf("expected %q, got %q", wantAgy, gotAgy)
 	}
 
 	gotCC := ResolveDiscordImageKey(cfg, "claude", "working", "claude-sonnet-4-6")
-	wantCC := config.DefaultGifBaseURL + "/claude-working.gif"
+	wantCC := config.DefaultGifBaseURL + "/claude-working.gif?v=" + config.GifAssetVersion
 	if gotCC != wantCC {
 		t.Fatalf("expected custom Claude GIF (%q), got %q", wantCC, gotCC)
 	}
 
 	gotDual := ResolveDiscordImageKey(cfg, "antigravity", "dual", "gemini-4-neon-high")
-	wantDual := config.DefaultGifBaseURL + "/agy-dual.gif"
+	wantDual := config.DefaultGifBaseURL + "/agy-dual.gif?v=" + config.GifAssetVersion
 	if gotDual != wantDual {
 		t.Fatalf("expected Dual Wielding GIF (%q), got %q", wantDual, gotDual)
 	}

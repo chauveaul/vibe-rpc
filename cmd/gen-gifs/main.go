@@ -12,7 +12,7 @@ import (
 
 const (
 	size       = 256
-	frameCount = 24
+	frameCount = 36
 )
 
 type rgb struct{ r, g, b float64 }
@@ -436,37 +436,37 @@ func main() {
 
 	specs := []themeSpec{
 		{
-			name: "agy-working.gif", mode: "working", delayCS: 5, bobAmp: 6.5, orbitSpd: 1.0, starAlpha: 0.75,
+			name: "agy-working.gif", mode: "working", delayCS: 9, bobAmp: 6.0, orbitSpd: 1.0, starAlpha: 0.75,
 			bgTop: rgb{18, 22, 34}, bgBot: rgb{12, 14, 21},
 			accentA: rgb{66, 133, 244}, accentB: rgb{56, 189, 248}, badge: rgb{52, 168, 83},
 		},
 		{
-			name: "agy-thinking.gif", mode: "thinking", delayCS: 6, bobAmp: 8.5, orbitSpd: 1.0, starAlpha: 0.85,
+			name: "agy-thinking.gif", mode: "thinking", delayCS: 10, bobAmp: 7.5, orbitSpd: 1.0, starAlpha: 0.85,
 			bgTop: rgb{22, 20, 38}, bgBot: rgb{13, 14, 22},
 			accentA: rgb{99, 102, 241}, accentB: rgb{167, 139, 250}, badge: rgb{138, 180, 248},
 		},
 		{
-			name: "agy-compacting.gif", mode: "compacting", delayCS: 5, bobAmp: 4.5, orbitSpd: 1.0, starAlpha: 0.65,
+			name: "agy-compacting.gif", mode: "compacting", delayCS: 9, bobAmp: 4.5, orbitSpd: 1.0, starAlpha: 0.65,
 			bgTop: rgb{19, 22, 38}, bgBot: rgb{12, 13, 20},
 			accentA: rgb{83, 127, 196}, accentB: rgb{129, 140, 248}, badge: rgb{96, 165, 250},
 		},
 		{
-			name: "agy-shipped.gif", mode: "shipped", delayCS: 5, bobAmp: 9.0, orbitSpd: 1.0, starAlpha: 0.9,
+			name: "agy-shipped.gif", mode: "shipped", delayCS: 8, bobAmp: 8.5, orbitSpd: 1.0, starAlpha: 0.9,
 			bgTop: rgb{15, 28, 26}, bgBot: rgb{12, 15, 20},
 			accentA: rgb{52, 168, 83}, accentB: rgb{66, 133, 244}, badge: rgb{251, 188, 5},
 		},
 		{
-			name: "agy-notification.gif", mode: "notification", delayCS: 5, bobAmp: 5.0, orbitSpd: 1.0, starAlpha: 0.65,
+			name: "agy-notification.gif", mode: "notification", delayCS: 9, bobAmp: 5.0, orbitSpd: 1.0, starAlpha: 0.65,
 			bgTop: rgb{32, 24, 18}, bgBot: rgb{15, 14, 18},
 			accentA: rgb{251, 188, 5}, accentB: rgb{249, 115, 22}, badge: rgb{251, 188, 5},
 		},
 		{
-			name: "agy-idle.gif", mode: "idle", delayCS: 8, bobAmp: 4.5, orbitSpd: 0.5, starAlpha: 0.8,
+			name: "agy-idle.gif", mode: "idle", delayCS: 13, bobAmp: 4.5, orbitSpd: 1.0, starAlpha: 0.8,
 			bgTop: rgb{17, 20, 30}, bgBot: rgb{11, 13, 19},
 			accentA: rgb{83, 127, 196}, accentB: rgb{138, 180, 248}, badge: rgb{148, 163, 184},
 		},
 		{
-			name: "agy-stale.gif", mode: "stale", delayCS: 10, bobAmp: 2.0, orbitSpd: 0.5, starAlpha: 0.45,
+			name: "agy-stale.gif", mode: "stale", delayCS: 15, bobAmp: 2.0, orbitSpd: 1.0, starAlpha: 0.45,
 			bgTop: rgb{16, 18, 24}, bgBot: rgb{11, 12, 16},
 			accentA: rgb{71, 85, 105}, accentB: rgb{100, 116, 139}, badge: rgb{71, 85, 105},
 		},

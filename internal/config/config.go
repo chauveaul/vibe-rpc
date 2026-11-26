@@ -176,7 +176,10 @@ func (c Config) Clone() Config {
 	return out
 }
 
-const DefaultClientID = "1506443909406920948"
+const (
+	DefaultClientID   = "1506443909406920948"
+	DefaultGifBaseURL = "https://raw.githubusercontent.com/chauveaul/agy-rpc/main/internal/server/assets/gifs"
+)
 
 var Statuses = []string{"working", "thinking", "compacting", "shipped", "notification", "idle"}
 
@@ -184,6 +187,7 @@ func Default() Config {
 	return Config{
 		ClientID:              DefaultClientID,
 		AppName:               "Antigravity",
+		GifBaseURL:            DefaultGifBaseURL,
 		Sources:               SourcesConfig{Antigravity: BoolPtr(true), Claude: BoolPtr(true)},
 		DynamicAppName:        BoolPtr(true),
 		UpdateIntervalMs:      4000,
@@ -216,15 +220,6 @@ func Default() Config {
 			"idle":         "/assets/gifs/agy-idle.gif",
 			"stale":        "/assets/gifs/agy-stale.gif",
 			"notification": "/assets/gifs/agy-notification.gif",
-		},
-		ClaudeStatusAssets: map[string]string{
-			"working":      "https://cdn.qualit.ly/clawd-working-building.gif",
-			"thinking":     "https://cdn.qualit.ly/clawd-working-typing.gif",
-			"compacting":   "https://cdn.qualit.ly/clawd-working-typing.gif",
-			"shipped":      "https://cdn.qualit.ly/clawd-working-building.gif",
-			"idle":         "https://cdn.qualit.ly/clawd-sleeping.gif",
-			"stale":        "https://cdn.qualit.ly/clawd-sleeping.gif",
-			"notification": "https://cdn.qualit.ly/clawd-notification.gif",
 		},
 		Presence: PresenceConfig{
 			LargeImageKey:  "/assets/gifs/agy-idle.gif",

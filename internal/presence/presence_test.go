@@ -64,3 +64,17 @@ func TestComputeActiveSources(t *testing.T) {
 		t.Fatalf("expected both active from OS processes, got agy=%v cc=%v", agy, cc)
 	}
 }
+
+func TestResolveDiscordImageKey(t *testing.T) {
+	cfg := config.Default()
+	gotAgy := ResolveDiscordImageKey(cfg, "antigravity", "working", "gemini-4-neon-high")
+	wantAgy := config.DefaultGifBaseURL + "/agy-working.gif"
+	if gotAgy != wantAgy {
+		t.Fatalf("expected %q, got %q", wantAgy, gotAgy)
+	}
+
+	gotCC := ResolveDiscordImageKey(cfg, "claude", "working", "claude-sonnet-4-6")
+	if gotCC != wantAgy {
+		t.Fatalf("expected Antigravity GIF fallback for Claude too (%q), got %q", wantAgy, gotCC)
+	}
+}

@@ -79,7 +79,7 @@ func TestIPCClientHandshakeAndSetActivity(t *testing.T) {
 		Type:          0,
 		Details:       "Working in agy-rpc",
 		State:         "Edit · main.go",
-		LargeImageKey: "https://cdn.qualit.ly/clawd-working-building.gif",
+		LargeImageKey: "https://cdn.jsdelivr.net/gh/chauveaul/agy-rpc@main/internal/server/assets/gifs/agy-working.gif",
 	})
 	if err != nil {
 		t.Fatalf("SetActivity failed: %v", err)

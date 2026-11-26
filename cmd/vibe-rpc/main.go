@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -32,6 +34,7 @@ import (
 	"github.com/chauveaul/vibe-rpc/internal/state"
 	"github.com/chauveaul/vibe-rpc/internal/stats"
 	"github.com/chauveaul/vibe-rpc/internal/tui"
+	"github.com/chauveaul/vibe-rpc/internal/update"
 )
 
 func openBrowser(u string) {
@@ -829,9 +832,77 @@ func main() {
 	}
 	assetsCmd.AddCommand(assetsExportCmd)
 
+	// upgrade
+	var upCheck, upForce bool
+	upgradeCmd := &cobra.Command{
+		Use:     "upgrade",
+		Aliases: []string{"update"},
+		Short:   "Update vibe-rpc to the latest GitHub release",
+		Long: `Checks GitHub Releases for a newer vibe-rpc, downloads the build for this
+platform, verifies its SHA-256 checksum, checks the new binary runs, and
+replaces the current executable. A running daemon is restarted on the new
+version. Homebrew/Scoop installs should be upgraded with their package manager.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, cancel := context.WithTimeout(cmd.Context(), 3*time.Minute)
+			defer cancel()
+			cur := paths.Version
+			fmt.Printf("Current version: %s\n", cur)
+			rel, err := update.Client{}.Latest(ctx)
+			if errors.Is(err, update.ErrNoRelease) {
+				fmt.Println("No releases have been published yet — nothing to upgrade to.")
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			newer := update.Newer(rel.Version(), cur)
+			fmt.Printf("Latest release:  %s\n", rel.Version())
+			if !newer && !upForce {
+				fmt.Println("You're up to date.")
+				return nil
+			}
+			if upCheck {
+				if newer {
+					fmt.Printf("Update available. Run `vibe-rpc upgrade` to install it.\n%s\n", rel.HTMLURL)
+				}
+				return nil
+			}
+			exe, err := update.Executable()
+			if err != nil {
+				return err
+			}
+			if pm := update.ManagedBy(exe); pm != "" {
+				return fmt.Errorf("%s is managed by %s", exe, pm)
+			}
+			fmt.Printf("Downloading %s for %s/%s…\n", rel.Tag, runtime.GOOS, runtime.GOARCH)
+			bin, err := update.Client{}.Fetch(ctx, rel, runtime.GOOS, runtime.GOARCH)
+			if err != nil {
+				return err
+			}
+			fmt.Println("Checksum verified.")
+			if err := update.Install(bin, exe, rel.Version()); err != nil {
+				return err
+			}
+			fmt.Printf("Installed vibe-rpc %s at %s\n", rel.Version(), exe)
+			if daemon.AlivePID() > 0 {
+				daemon.ClearStopped()
+				daemon.StopAndWait()
+				pid, err := daemon.SpawnDetached()
+				if err != nil {
+					return fmt.Errorf("upgraded, but restarting the daemon failed: %w (run `vibe-rpc start`)", err)
+				}
+				fmt.Printf("Daemon restarted on the new version (pid %d).\n", pid)
+			}
+			fmt.Println("Restart `vibe-rpc serve` if it's running to load the new dashboard.")
+			return nil
+		},
+	}
+	upgradeCmd.Flags().BoolVar(&upCheck, "check", false, "Only check whether an update is available")
+	upgradeCmd.Flags().BoolVar(&upForce, "force", false, "Reinstall even if already on the latest version")
+
 	root.AddCommand(
 		setupCmd, uninstallCmd, serveCmd, settingsCmd, wrappedCmd,
-		daemonCmd, startCmd, stopCmd, restartCmd, hookCmd,
+		daemonCmd, startCmd, stopCmd, restartCmd, upgradeCmd, hookCmd,
 		statusCmd, todayCmd, weekCmd, projectsCmd, recapCmd,
 		insightsCmd, exportCmd, statcardsCmd, statuslineCmd, mcpCmd,
 		privateCmd, pauseCmd, logsCmd, doctorCmd, scanCmd, backfillCmd,

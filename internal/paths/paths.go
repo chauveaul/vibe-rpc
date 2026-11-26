@@ -7,7 +7,9 @@ import (
 	"sync"
 )
 
-const Version = "2.0.0"
+// Version is overridden at release build time via
+// -ldflags "-X github.com/chauveaul/vibe-rpc/internal/paths.Version=<tag>".
+var Version = "2.0.0"
 
 func HomeDir() string {
 	h, err := os.UserHomeDir()

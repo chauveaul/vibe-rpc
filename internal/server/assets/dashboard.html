@@ -184,14 +184,26 @@
 
     <section>
       <div class="section-head">
-        <h2>90-Day Heatmap</h2>
+        <h2>Last 12 Months</h2>
         <span class="right">Click any day for breakdown</span>
       </div>
       <div class="card heatmap-card">
-        <div class="heatmap-grid">
-          {{range .HeatmapCells}}
-            <a class="heatmap-cell {{.Level}}" href="/?range={{$.Range}}&day={{.Day}}" title="{{.Day}}: {{.Hours}} ({{.Prompts}} prompts)"></a>
-          {{end}}
+        <div class="heatmap-scroll">
+          <div class="heatmap" style="--weeks: {{.Heatmap.Weeks}}">
+            <div class="heatmap-months" aria-hidden="true">
+              {{range .Heatmap.Months}}<span style="grid-column: {{.Col}}">{{.Name}}</span>{{end}}
+            </div>
+            <div class="heatmap-days" aria-hidden="true"><span></span><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span></div>
+            <div class="heatmap-grid">
+              {{range .Heatmap.Cells}}
+                {{if .Future}}<span class="heatmap-cell future" aria-hidden="true"></span>{{else}}<a class="heatmap-cell {{.Level}}" href="/?range={{$.Range}}&day={{.Day}}" title="{{.Title}}" aria-label="{{.Title}}"></a>{{end}}
+              {{end}}
+            </div>
+          </div>
+        </div>
+        <div class="heatmap-foot">
+          <span><strong class="num">{{.Heatmap.ActiveDays}}</strong> active days · <strong class="num">{{.Heatmap.TotalHours}}</strong> coding in the last 12 months</span>
+          <span class="heatmap-legend" aria-hidden="true">Less <i class="heatmap-cell"></i><i class="heatmap-cell l1"></i><i class="heatmap-cell l2"></i><i class="heatmap-cell l3"></i><i class="heatmap-cell l4"></i> More</span>
         </div>
       </div>
     </section>

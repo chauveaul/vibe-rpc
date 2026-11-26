@@ -275,9 +275,11 @@ type rangePill struct {
 
 type heatCell struct {
 	Day     string
+	Label   string // e.g. "Thu Nov 26, 2026"
 	Level   string
 	Hours   string
 	Prompts int
+	Future  bool // placeholder after today in the current week
 }
 
 type modelRow struct {
@@ -481,32 +483,8 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Heatmap (91 days = 13 weeks)
-	heatRows := stats.WeekGrid(agg, 91)
-	var maxHeat int64 = 1
-	for _, hr := range heatRows {
-		if hr.ActiveMs > maxHeat {
-			maxHeat = hr.ActiveMs
-		}
-	}
-	cells := make([]heatCell, 0, len(heatRows))
-	for _, hr := range heatRows {
-		lvl := ""
-		if hr.ActiveMs > 0 {
-			ratio := float64(hr.ActiveMs) / float64(maxHeat)
-			switch {
-			case ratio >= 0.75:
-				lvl = "l4"
-			case ratio >= 0.5:
-				lvl = "l3"
-			case ratio >= 0.25:
-				lvl = "l2"
-			default:
-				lvl = "l1"
-			}
-		}
-		cells = append(cells, heatCell{Day: hr.Day, Level: lvl, Hours: format.FmtHours(hr.ActiveMs), Prompts: hr.Prompts})
-	}
+	// Heatmap: rolling 12 months, week columns aligned Sunday→Saturday
+	heat := buildYearHeatmap(agg, time.Now())
 
 	// Models
 	var models []modelRow
@@ -684,7 +662,7 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 		"DaysSinceFirst":   agg.DaysSinceFirst,
 		"Compare":          cmp,
 		"Running":          listRunning(cfg, st.SessionID),
-		"HeatmapCells":     cells,
+		"Heatmap":          heat,
 		"Models":           models,
 		"Languages":        langs,
 		"ChurnSparkSVG":    renderChurnSVG(agg),

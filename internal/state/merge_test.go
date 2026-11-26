@@ -28,3 +28,15 @@ func TestListSessionsPrefersOwnStateOverClaudeRPC(t *testing.T) {
 		t.Fatalf("claude-rpc-only sessions should still appear: %+v", got)
 	}
 }
+
+func TestListSessionsOpenCodeToggle(t *testing.T) {
+	own := t.TempDir()
+	b, _ := json.Marshal(SessionState{Source: "opencode", Status: "working"})
+	_ = os.WriteFile(filepath.Join(own, "state-oc.json"), b, 0o644)
+	list := func(include bool) int {
+		return len(ListSessions(ListOptions{IncludeAntigravity: true, IncludeClaude: true, IncludeOpenCode: include, StateDir: own, ClaudeStateDir: t.TempDir()}))
+	}
+	if list(true) != 1 || list(false) != 0 {
+		t.Fatalf("include=%d exclude=%d", list(true), list(false))
+	}
+}

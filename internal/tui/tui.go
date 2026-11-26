@@ -66,6 +66,7 @@ func loadSnapshot() (config.Config, *scanner.Aggregate, state.SessionState, int,
 	sessions := state.ListSessions(state.ListOptions{
 		IncludeAntigravity: cfg.Sources.WantAntigravity(),
 		IncludeClaude:      cfg.Sources.WantClaude(),
+		IncludeOpenCode:    cfg.Sources.WantOpenCode(),
 		IncludeClaudeRPC:   true,
 	})
 	idleMs := int64(cfg.IdleThresholdSec) * 1000
@@ -478,8 +479,12 @@ func (m model) viewLifetime() string {
 			agy.Sessions, format.FmtHours(agy.ActiveMs), format.FmtNum(agy.Tokens), pricing.FmtCost(agy.Cost)),
 		fmt.Sprintf("  Claude Code : %d sessions · %s · %s tokens · %s",
 			cc.Sessions, format.FmtHours(cc.ActiveMs), format.FmtNum(cc.Tokens), pricing.FmtCost(cc.Cost)),
-		fmt.Sprintf("  Dual wield  : %s running both agents simultaneously", styleVal.Render(format.FmtHours(dualMs))),
 	}
+	if oc := m.agg.BySource["opencode"]; oc != nil && oc.Sessions > 0 {
+		lines = append(lines, fmt.Sprintf("  OpenCode    : %d sessions · %s · %s tokens · %s",
+			oc.Sessions, format.FmtHours(oc.ActiveMs), format.FmtNum(oc.Tokens), pricing.FmtCost(oc.Cost)))
+	}
+	lines = append(lines, fmt.Sprintf("  Dual wield  : %s running two or more agents simultaneously", styleVal.Render(format.FmtHours(dualMs))))
 	return strings.Join(lines, "\n")
 }
 

@@ -135,3 +135,17 @@ func TestDualWieldingDetection(t *testing.T) {
 		t.Fatal("expected IsDualWorking=true when both agents are active & working")
 	}
 }
+
+func TestDiscordFilters(t *testing.T) {
+	cfg := config.Default()
+	cfg.DiscordSources.Claude = config.BoolPtr(false)
+	o := DiscordListOptions(cfg)
+	if !o.IncludeAntigravity || o.IncludeClaude || !o.IncludeOpenCode {
+		t.Fatalf("options = %+v", o)
+	}
+	live := []state.LiveSession{{Source: "claude"}, {Source: "antigravity"}, {Source: "opencode"}}
+	got := FilterLiveForDiscord(live, cfg)
+	if len(got) != 2 || got[0].Source != "antigravity" || got[1].Source != "opencode" {
+		t.Fatalf("filtered = %+v", got)
+	}
+}

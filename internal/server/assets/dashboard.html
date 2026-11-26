@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   {{if .AutoRefresh}}<meta http-equiv="refresh" content="10">{{end}}
-  <title>vibe-rpc · Antigravity + Claude Code</title>
+  <title>vibe-rpc</title>
   <link rel="stylesheet" href="/assets/dashboard.css">
 </head>
 <body>
@@ -207,52 +207,45 @@
 
     <section aria-labelledby="vs-h">
       <div class="section-head">
-        <h2 id="vs-h">Antigravity vs Claude Code</h2>
+        <h2 id="vs-h">{{.Compare.Title}}</h2>
         <span class="right">{{.RangeTitle}}</span>
       </div>
       <div class="card versus">
-        <div class="vs-head">
-          <span class="vs-side agy"><span class="src-dot antigravity" aria-hidden="true"></span>Antigravity</span>
-          <span class="vs-mid">vs</span>
-          <span class="vs-side cc">Claude Code<span class="src-dot claude" aria-hidden="true"></span></span>
-        </div>
         {{if .Compare.HasData}}
         <table class="vs-table">
-          <caption class="sr-only">Antigravity and Claude Code compared for {{.RangeTitle}}</caption>
-          <thead class="sr-only"><tr><th scope="col">Antigravity</th><th scope="col">Metric</th><th scope="col">Claude Code</th></tr></thead>
+          <caption class="sr-only">{{.Compare.Title}} compared for {{.RangeTitle}}</caption>
+          <thead>
+            <tr>
+              <th scope="col"><span class="sr-only">Metric</span></th>
+              {{range .Compare.Agents}}<th scope="col" class="vs-agent"><span class="src-dot {{.Key}}" aria-hidden="true"></span>{{.Name}}</th>{{end}}
+            </tr>
+          </thead>
           <tbody>
           {{range .Compare.Rows}}
             <tr>
-              <td class="vs-val agy num{{if .AgyLeads}} lead{{end}}">{{.Agy}}</td>
               <th scope="row" class="vs-metric">
                 <span class="vs-label">{{.Label}}</span>
-                <span class="vs-bar" aria-hidden="true"><span class="a" style="width:{{.AgyPct}}%"></span><span class="c" style="width:{{.ClaudePct}}%"></span></span>
+                <span class="vs-stack" aria-hidden="true">{{range .Cells}}<span class="seg {{.Key}}" style="width:{{.Pct}}%"></span>{{end}}</span>
               </th>
-              <td class="vs-val cc num{{if .CCLeads}} lead{{end}}">{{.Claude}}</td>
+              {{range .Cells}}<td class="vs-val num{{if .Leads}} lead{{end}}">{{.Text}}</td>{{end}}
             </tr>
           {{end}}
           </tbody>
         </table>
         <div class="vs-tools">
+          {{range .Compare.Tools}}
           <div>
-            <div class="vs-tools-h">Top tools</div>
-            {{range .Compare.AgyTools}}
+            <div class="vs-tools-h"><span class="src-dot {{.Key}}" aria-hidden="true"></span>{{.Name}} · top tools</div>
+            {{range .Tools}}
               <div class="tool-row"><span class="name">{{.Name}}</span><span class="track"><span class="fill" style="width:{{.Pct}}%"></span></span><span class="val num">{{.Count}}</span></div>
             {{else}}
               <div class="vs-none">No tool calls in this range</div>
             {{end}}
           </div>
-          <div>
-            <div class="vs-tools-h">Top tools</div>
-            {{range .Compare.ClaudeTools}}
-              <div class="tool-row"><span class="name">{{.Name}}</span><span class="track"><span class="fill" style="width:{{.Pct}}%"></span></span><span class="val num">{{.Count}}</span></div>
-            {{else}}
-              <div class="vs-none">No tool calls in this range</div>
-            {{end}}
-          </div>
+          {{end}}
         </div>
         <div class="vs-foot">
-          <span><strong class="num">{{.Compare.DualHours}}</strong> dual-wielding · {{.Compare.DualPct}} of your active time had both agents running at once</span>
+          <span><strong class="num">{{.Compare.DualHours}}</strong> dual-wielding · {{.Compare.DualPct}} of your active time had two or more agents running at once</span>
         </div>
         {{else}}
         <div class="vs-none pad">No activity in this range yet. Try a longer range, or run <code>vibe-rpc scan</code>.</div>

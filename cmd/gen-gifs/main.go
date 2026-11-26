@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"fmt"
 	"image"
 	"image/color"
@@ -117,9 +118,23 @@ func sdAntigravityA(px, py, cx, ay, scale float64) float64 {
 	return math.Min(math.Min(dLeft, dRight)-10.5*scale, math.Min(dArch1, dArch2)-6.8*scale)
 }
 
+// Signed distance to a terminal prompt ">_" (OpenCode emblem; original art).
+// cursorOn hides the underscore for the blink.
+func sdPrompt(px, py, cx, cy, scale float64, cursorOn bool) float64 {
+	tipX, tipY := cx-4*scale, cy
+	top := sdSegment(px, py, cx-40*scale, cy-34*scale, tipX, tipY)
+	bot := sdSegment(px, py, tipX, tipY, cx-40*scale, cy+34*scale)
+	d := math.Min(top, bot) - 9*scale
+	if cursorOn {
+		under := sdSegment(px, py, cx+10*scale, cy+34*scale, cx+44*scale, cy+34*scale) - 8*scale
+		d = math.Min(d, under)
+	}
+	return d
+}
+
 type themeSpec struct {
 	name      string
-	kind      string // "antigravity", "claude", "dual"
+	kind      string // "antigravity", "claude", "dual", "opencode"
 	bgTop     rgb
 	bgBot     rgb
 	accentA   rgb
@@ -442,6 +457,23 @@ func renderFrame(spec themeSpec, frame int, pal color.Palette) *image.Paletted {
 					col = addGlow(col, lerpColor(baseG, rgb{255, 248, 240}, sheen), cov)
 				}
 
+			case "opencode":
+				// Cursor blinks: on for the first half of the loop (always on when idle/away).
+				cursorOn := frame < frameCount/2 || spec.mode == "idle" || spec.mode == "stale"
+				dP := sdPrompt(fx, fy, cx, ay, 1.0, cursorOn)
+				if dP > 0 && dP < 22 {
+					glowA := math.Exp(-(dP*dP)/(2*9*9)) * 0.50
+					gradT := math.Max(0, math.Min(1, (fx-(cx-50))/100.0))
+					col = screenGlow(col, lerpColor(spec.accentA, spec.accentB, gradT), glowA)
+				}
+				if dP < 1.5 {
+					cov := 1.0 - smoothstep(-1.2, 1.2, dP)
+					gradY := math.Max(0, math.Min(1, (fy-(ay-40))/90.0))
+					baseG := lerpColor(spec.accentA, spec.accentB, gradY)
+					sheen := math.Max(0, 1.0-gradY*1.6) * 0.45
+					col = addGlow(col, lerpColor(baseG, rgb{240, 255, 250}, sheen), cov)
+				}
+
 			case "dual":
 				// Antigravity 'A' prism (left)
 				dA := sdAntigravityA(fx, fy, dualAgyX, dualAgyY, 0.72)
@@ -587,6 +619,54 @@ func main() {
 			bgTop: rgb{20, 18, 19}, bgBot: rgb{11, 11, 13},
 			accentA: rgb{110, 90, 86}, accentB: rgb{140, 120, 116}, badge: rgb{90, 95, 105},
 		},
+		// OpenCode GIFs (teal terminal prompt with a blinking cursor)
+		{
+			name: "opencode-working.gif", kind: "opencode", mode: "working", delayCS: 9, bobAmp: 6.0, orbitSpd: 1.0, starAlpha: 0.75,
+			bgTop: rgb{14, 26, 26}, bgBot: rgb{10, 14, 16},
+			accentA: rgb{45, 212, 191}, accentB: rgb{125, 233, 214}, badge: rgb{52, 168, 83},
+		},
+		{
+			name: "opencode-thinking.gif", kind: "opencode", mode: "thinking", delayCS: 10, bobAmp: 7.5, orbitSpd: 1.0, starAlpha: 0.85,
+			bgTop: rgb{16, 24, 32}, bgBot: rgb{10, 13, 18},
+			accentA: rgb{56, 189, 248}, accentB: rgb{94, 234, 212}, badge: rgb{125, 211, 252},
+		},
+		{
+			name: "opencode-compacting.gif", kind: "opencode", mode: "compacting", delayCS: 9, bobAmp: 4.5, orbitSpd: 1.0, starAlpha: 0.65,
+			bgTop: rgb{15, 24, 28}, bgBot: rgb{10, 13, 17},
+			accentA: rgb{45, 160, 170}, accentB: rgb{103, 199, 214}, badge: rgb{94, 234, 212},
+		},
+		{
+			name: "opencode-shipped.gif", kind: "opencode", mode: "shipped", delayCS: 8, bobAmp: 8.5, orbitSpd: 1.0, starAlpha: 0.9,
+			bgTop: rgb{14, 30, 24}, bgBot: rgb{10, 15, 16},
+			accentA: rgb{52, 211, 153}, accentB: rgb{45, 212, 191}, badge: rgb{251, 188, 5},
+		},
+		{
+			name: "opencode-notification.gif", kind: "opencode", mode: "notification", delayCS: 9, bobAmp: 5.0, orbitSpd: 1.0, starAlpha: 0.65,
+			bgTop: rgb{32, 24, 18}, bgBot: rgb{15, 14, 18},
+			accentA: rgb{251, 188, 5}, accentB: rgb{249, 115, 22}, badge: rgb{251, 188, 5},
+		},
+		{
+			name: "opencode-idle.gif", kind: "opencode", mode: "idle", delayCS: 13, bobAmp: 4.5, orbitSpd: 1.0, starAlpha: 0.8,
+			bgTop: rgb{15, 22, 24}, bgBot: rgb{10, 13, 16},
+			accentA: rgb{56, 150, 150}, accentB: rgb{125, 200, 200}, badge: rgb{148, 163, 184},
+		},
+		{
+			name: "opencode-stale.gif", kind: "opencode", mode: "stale", delayCS: 15, bobAmp: 2.0, orbitSpd: 1.0, starAlpha: 0.45,
+			bgTop: rgb{16, 18, 20}, bgBot: rgb{11, 12, 14},
+			accentA: rgb{71, 95, 100}, accentB: rgb{100, 125, 130}, badge: rgb{71, 85, 105},
+		},
+	}
+
+	// Optional name prefix filter (e.g. "opencode-") so existing, possibly
+	// hand-edited GIFs aren't regenerated.
+	if len(os.Args) > 1 {
+		var kept []themeSpec
+		for _, sp := range specs {
+			if strings.HasPrefix(sp.name, os.Args[1]) {
+				kept = append(kept, sp)
+			}
+		}
+		specs = kept
 	}
 
 	for _, spec := range specs {

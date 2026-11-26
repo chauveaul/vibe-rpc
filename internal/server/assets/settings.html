@@ -159,8 +159,8 @@
         </div>
         {{else}}
         <div class="sub-head">
-          <h3>Status GIFs (Antigravity &amp; Claude Code)</h3>
-          <span class="set-hint">Antigravity uses the left GIF; Claude-only sessions use the right GIF</span>
+          <h3>Status GIFs</h3>
+          <span class="set-hint">Each agent's sessions use its own GIF</span>
         </div>
         <div class="gif-pair">
           <div class="gif-panel">
@@ -208,6 +208,31 @@
               {{end}}
             </div>
           </div>
+
+          {{if .ShowOpenCodeGifs}}
+          <div class="gif-panel">
+            <div class="gif-panel-head">
+              <div class="gif-panel-thumb">{{if .OpenCodeStatusImage}}<img src="{{.OpenCodeStatusImage}}" alt="OpenCode GIF">{{end}}</div>
+              <div>
+                <div class="gif-panel-title">OpenCode</div>
+                <div class="gif-panel-sub">Shown for OpenCode sessions</div>
+              </div>
+            </div>
+            <label class="field">
+              GIF URL or asset key
+              <input type="text" name="opencode_status_image" value="{{.OpenCodeStatusImage}}" placeholder="/assets/gifs/opencode-working.gif or https://...">
+            </label>
+            <div class="gif-gallery compact">
+              {{range .BuiltinOpenCodeGifs}}
+                <div class="gif-tile {{if .Active}}active{{end}}">
+                  <img src="{{.Path}}" alt="{{.Label}}">
+                  <div class="g-name">{{.Label}}</div>
+                  <button type="submit" formaction="/settings/gif/pick" name="gif_pick" value="opencode:{{.Path}}">{{if .Active}}Active{{else}}Use{{end}}</button>
+                </div>
+              {{end}}
+            </div>
+          </div>
+          {{end}}
         </div>
         {{end}}
 
@@ -277,10 +302,30 @@
           </div>
         </div>
 
+        <div class="sub-head">
+          <h3>Agents</h3>
+          <span class="set-hint">Choose which coding agents vibe-rpc tracks, and which of those can appear on Discord</span>
+        </div>
+        <input type="hidden" name="agents_section" value="1">
+        <table class="agents-table">
+          <thead>
+            <tr><th scope="col">Agent</th><th scope="col">On this Mac</th><th scope="col">Track</th><th scope="col">Show on Discord</th></tr>
+          </thead>
+          <tbody>
+          {{range .Agents}}
+            <tr class="{{if not .Track}}off{{end}}">
+              <th scope="row"><span class="agent-name"><span class="src-dot {{.Key}}" aria-hidden="true"></span>{{.Name}}</span></th>
+              <td>{{if .Installed}}<span class="found" title="{{.Where}}">Installed</span>{{else}}<span class="missing">Not found</span>{{end}}</td>
+              <td><label class="switch"><input type="checkbox" name="track_{{.Key}}" {{if .Track}}checked{{end}} aria-label="Track {{.Name}}"><span></span></label></td>
+              <td><label class="switch"><input type="checkbox" name="discord_{{.Key}}" {{if .Discord}}checked{{end}} aria-label="Show {{.Name}} on Discord"><span></span></label></td>
+            </tr>
+          {{end}}
+          </tbody>
+        </table>
+        <p class="set-note">Tracked agents feed your stats, the dashboard and VibeNotch. Untick <strong>Show on Discord</strong> to keep an agent's activity private while still tracking it. An agent has to be tracked to show on Discord.</p>
+
         <div class="checks row">
-          <label class="check"><input type="checkbox" name="sourceAntigravity" {{if .Cfg.Sources.WantAntigravity}}checked{{end}}> Track Antigravity</label>
-          <label class="check"><input type="checkbox" name="sourceClaude" {{if .Cfg.Sources.WantClaude}}checked{{end}}> Combine Claude Code activity</label>
-          <label class="check"><input type="checkbox" name="dynamicAppName" {{if .Cfg.IsDynamicAppName}}checked{{end}}> Dynamic app name ("Antigravity", "Claude Code", or "Antigravity &amp; Claude")</label>
+          <label class="check"><input type="checkbox" name="dynamicAppName" {{if .Cfg.IsDynamicAppName}}checked{{end}}> Dynamic app name (the agent you're using, or "Antigravity &amp; Claude" when dual wielding)</label>
         </div>
 
         <div class="sub-head">

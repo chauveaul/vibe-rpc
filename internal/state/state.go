@@ -222,6 +222,7 @@ func Reset(sessionID string, seed func(*SessionState)) (SessionState, error) {
 type ListOptions struct {
 	IncludeAntigravity bool
 	IncludeClaude      bool
+	IncludeOpenCode    bool
 	IncludeClaudeRPC   bool
 	StateDir           string
 	ClaudeStateDir     string
@@ -266,11 +267,19 @@ func ListSessions(opts ListOptions) []SessionState {
 	byID := map[string]SessionState{}
 
 	for _, s := range readDirSessionStates(opts.StateDir, "antigravity") {
-		if s.Source == "claude" && !opts.IncludeClaude {
-			continue
-		}
-		if s.Source != "claude" && !opts.IncludeAntigravity {
-			continue
+		switch s.Source {
+		case "claude":
+			if !opts.IncludeClaude {
+				continue
+			}
+		case "opencode":
+			if !opts.IncludeOpenCode {
+				continue
+			}
+		default:
+			if !opts.IncludeAntigravity {
+				continue
+			}
 		}
 		byID[s.SessionID] = s
 	}

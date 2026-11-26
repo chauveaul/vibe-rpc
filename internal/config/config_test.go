@@ -34,3 +34,23 @@ func TestSaveDiffOnlyWritesOverrides(t *testing.T) {
 		t.Fatalf("expected validation error for bad clientId")
 	}
 }
+
+func TestShowOnDiscordNeedsTrackingAndPermission(t *testing.T) {
+	c := Default()
+	for _, a := range Agents {
+		if !c.ShowOnDiscord(a) || !c.Sources.Tracks(a) {
+			t.Fatalf("%s should be tracked and shown by default", a)
+		}
+	}
+	c.Sources.OpenCode = BoolPtr(false)
+	c.DiscordSources.Claude = BoolPtr(false)
+	if c.ShowOnDiscord("opencode") || c.Sources.Tracks("opencode") {
+		t.Fatal("untracked agents never show on Discord")
+	}
+	if c.ShowOnDiscord("claude") || !c.Sources.Tracks("claude") {
+		t.Fatal("hidden-from-Discord agents stay tracked")
+	}
+	if !c.ShowOnDiscord("antigravity") {
+		t.Fatal("antigravity unaffected")
+	}
+}

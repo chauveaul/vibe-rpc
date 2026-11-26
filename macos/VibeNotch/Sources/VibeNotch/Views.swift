@@ -774,7 +774,7 @@ struct AlertRow: View {
                             .lineLimit(1)
                             .truncationMode(.tail)
                         HStack(spacing: 4) {
-                            Text(alert.source == "claude" ? "Claude Code" : "Antigravity")
+                            Text(AgentLogo.name(for: alert.source))
                             if !alert.project.isEmpty { Text("·"); Text(alert.project) }
                             Text("·")
                             SinceText(ms: alert.since)
@@ -841,8 +841,21 @@ struct AgentLogo: View {
 
     private static var cache: [String: NSImage] = [:]
 
+    static func name(for source: String) -> String {
+        switch source {
+        case "claude": return "Claude Code"
+        case "opencode": return "OpenCode"
+        default: return "Antigravity"
+        }
+    }
+
     static func image(for source: String) -> NSImage {
         if let img = cache[source] { return img }
+        if source == "opencode" {
+            let result = openCodeImage()
+            cache[source] = result
+            return result
+        }
         let bundleID = source == "claude" ? "com.anthropic.claudefordesktop" : "com.google.antigravity"
         var img: NSImage?
         if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
@@ -856,5 +869,26 @@ struct AgentLogo: View {
         let result = img ?? NSImage(systemSymbolName: "sparkles", accessibilityDescription: nil) ?? NSImage()
         cache[source] = result
         return result
+    }
+}
+
+extension AgentLogo {
+    /// OpenCode is a CLI: use its desktop app's icon if installed, otherwise a
+    /// neutral code tile.
+    static func openCodeImage() -> NSImage {
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "ai.opencode.desktop") {
+            return NSWorkspace.shared.icon(forFile: url.path)
+        }
+        let size = NSSize(width: 64, height: 64)
+        return NSImage(size: size, flipped: false) { rect in
+            NSColor(white: 0.16, alpha: 1).setFill()
+            NSBezierPath(roundedRect: rect, xRadius: 14, yRadius: 14).fill()
+            if let sym = NSImage(systemSymbolName: "chevron.left.forwardslash.chevron.right", accessibilityDescription: "OpenCode"),
+               let tinted = sym.withSymbolConfiguration(.init(pointSize: 26, weight: .bold).applying(.init(paletteColors: [.white]))) {
+                let s = tinted.size
+                tinted.draw(in: NSRect(x: (rect.width - s.width) / 2, y: (rect.height - s.height) / 2, width: s.width, height: s.height))
+            }
+            return true
+        }
     }
 }

@@ -430,11 +430,9 @@ func (r *Runner) resolvePresence() (state.SessionState, config.Config, *scanner.
 		idleMs = 60_000
 	}
 
-	sessions := state.ListSessions(state.ListOptions{
-		IncludeAntigravity: cfg.Sources.WantAntigravity(),
-		IncludeClaude:      cfg.Sources.WantClaude(),
-		IncludeClaudeRPC:   true,
-	})
+	// Only agents allowed on Discord (Settings → Agents) drive the card.
+	sessions := state.ListSessions(presence.DiscordListOptions(cfg))
+	live = presence.FilterLiveForDiscord(live, cfg)
 	picked := presence.PickActiveSession(sessions, displayedID, now, idleMs)
 
 	var st state.SessionState

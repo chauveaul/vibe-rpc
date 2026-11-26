@@ -1247,9 +1247,10 @@ func AggregateFrom(cache *ScanCache) *Aggregate {
 		BySource: map[string]*SourceStats{
 			"antigravity": {},
 			"claude":      {},
+			"opencode":    {},
 		},
 		CompactionsByDay: map[string]int{},
-		SourceDays:       map[string]map[string]*SourceDay{"antigravity": {}, "claude": {}},
+		SourceDays:       map[string]map[string]*SourceDay{"antigravity": {}, "claude": {}, "opencode": {}},
 		DualByDay:        map[string]int64{},
 		GeneratedAt:      time.Now().UnixMilli(),
 		Version:          CacheVersion,
@@ -1262,10 +1263,7 @@ func AggregateFrom(cache *ScanCache) *Aggregate {
 			continue
 		}
 		isSub := s.IsSubagent || strings.Contains(strings.ReplaceAll(p, "\\", "/"), "/subagents/")
-		srcKey := "antigravity"
-		if s.Source == "claude" {
-			srcKey = "claude"
-		}
+		srcKey := SourceKey(s.Source)
 		sb := agg.BySource[srcKey]
 		sToks := s.InputTokens + s.OutputTokens + s.CacheReadTokens + s.CacheWriteTokens
 		sb.Tokens += sToks
@@ -1405,7 +1403,8 @@ func AggregateFrom(cache *ScanCache) *Aggregate {
 		}
 	}
 
-	agg.DualMs = overlapByDay(mergeSpans(spansBySource["antigravity"]), mergeSpans(spansBySource["claude"]), agg.DualByDay)
+	// "Dual wielding": time when two or more agents were active at once.
+	agg.DualMs = multiAgentByDay(spansBySource, agg.DualByDay)
 	agg.RecentSpans = map[string][][2]int64{}
 	cutoff := agg.GeneratedAt - 24*3_600_000
 	for src, spans := range spansBySource {
@@ -1641,6 +1640,24 @@ func Scan(opts ScanOptions) ScanResult {
 	cache := readCache()
 	cwds := state.ReadSessionCwds("")
 	scanned, skipped, removed := 0, 0, 0
+	total := len(transcripts)
+	if cfg.Sources.WantOpenCode() {
+		ocSeen, n, ok := scanOpenCode(cache, opts.Force)
+		scanned += n
+		total += len(ocSeen)
+		for k := range ocSeen {
+			seen[k] = true
+		}
+		if !ok {
+			// OpenCode missing or its query failed: keep its history as-is.
+			for k := range cache.Files {
+				if strings.HasPrefix(k, openCodeKeyPrefix) {
+					seen[k] = true
+				}
+			}
+		}
+	}
+
 	for _, fp := range transcripts {
 		st, err := os.Stat(fp)
 		if err != nil {
@@ -1680,13 +1697,13 @@ func Scan(opts ScanOptions) ScanResult {
 		writeCache(cache)
 	} else {
 		if existing := ReadAggregate(); existing != nil && existing.Version == CacheVersion && DayKey(existing.GeneratedAt) == DayKey(time.Now().UnixMilli()) {
-			return ScanResult{Aggregate: existing, Scanned: scanned, Skipped: skipped, Removed: removed, Total: len(transcripts)}
+			return ScanResult{Aggregate: existing, Scanned: scanned, Skipped: skipped, Removed: removed, Total: total}
 		}
 	}
 
 	agg := AggregateFrom(cache)
 	writeAggregate(agg)
-	return ScanResult{Aggregate: agg, Scanned: scanned, Skipped: skipped, Removed: removed, Total: len(transcripts)}
+	return ScanResult{Aggregate: agg, Scanned: scanned, Skipped: skipped, Removed: removed, Total: total}
 }
 
 func addSourceDays(days map[string]*SourceDay, s *TranscriptSummary, isSub bool) {
@@ -1785,4 +1802,59 @@ func ActiveWithin(spans [][2]int64, from, to int64) int64 {
 		}
 	}
 	return total
+}
+
+// SourceKey normalizes a session's source to an aggregate bucket key.
+func SourceKey(source string) string {
+	switch source {
+	case "claude", "opencode":
+		return source
+	}
+	return "antigravity"
+}
+
+// multiAgentByDay returns the total time when at least two agents' active
+// spans overlap, adding it to byDay split at local midnight.
+func multiAgentByDay(spansBySource map[string][][2]int64, byDay map[string]int64) int64 {
+	type edge struct {
+		t     int64
+		delta int
+	}
+	var edges []edge
+	for _, spans := range spansBySource {
+		for _, sp := range mergeSpans(spans) { // merge within an agent first
+			edges = append(edges, edge{sp[0], 1}, edge{sp[1], -1})
+		}
+	}
+	sort.Slice(edges, func(i, j int) bool {
+		if edges[i].t != edges[j].t {
+			return edges[i].t < edges[j].t
+		}
+		return edges[i].delta < edges[j].delta // close before open at the same instant
+	})
+	var total int64
+	active := 0
+	var from int64
+	for _, e := range edges {
+		if active >= 2 && e.t > from {
+			total += addSplitByDay(from, e.t, byDay)
+		}
+		active += e.delta
+		from = e.t
+	}
+	return total
+}
+
+// addSplitByDay adds [lo, hi) to byDay split at local midnight; returns hi-lo.
+func addSplitByDay(lo, hi int64, byDay map[string]int64) int64 {
+	for t := lo; t < hi; {
+		d := time.UnixMilli(t).Local()
+		next := time.Date(d.Year(), d.Month(), d.Day()+1, 0, 0, 0, 0, time.Local).UnixMilli()
+		end := min(next, hi)
+		if byDay != nil {
+			byDay[DayKey(t)] += end - t
+		}
+		t = end
+	}
+	return hi - lo
 }

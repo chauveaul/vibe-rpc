@@ -26,31 +26,47 @@ func TestBuildCompareRespectsRange(t *testing.T) {
 			"claude": {
 				today: {ActiveMs: 6 * h, Sessions: 3, Prompts: 30, Tokens: 3000, Cost: 3, Tools: map[string]int{"Bash": 12}},
 			},
+			"opencode": {
+				today: {ActiveMs: 2 * h, Sessions: 1, Prompts: 5, Tokens: 500},
+			},
 		},
 		DualMs:    3 * h,
 		DualByDay: map[string]int64{today: 1 * h, old: 2 * h},
 	}
 
-	v := buildCompare(agg, "7d")
+	v := buildCompare(agg, "7d", []string{"antigravity", "claude", "opencode"})
+	if v.Title != "Antigravity vs Claude Code vs OpenCode" || len(v.Agents) != 3 || len(v.Tools) != 3 {
+		t.Fatalf("agents/title = %q %d %d", v.Title, len(v.Agents), len(v.Tools))
+	}
 	hours := v.Rows[0]
-	if hours.Agy != "2.0h" || hours.Claude != "6.0h" || hours.AgyPct != 25 || hours.ClaudePct != 75 || !hours.CCLeads {
-		t.Fatalf("7d hours row = %+v", hours)
+	if hours.Cells[0].Text != "2.0h" || hours.Cells[1].Text != "6.0h" || hours.Cells[2].Text != "2.0h" {
+		t.Fatalf("7d hours = %+v", hours.Cells)
 	}
-	if avg := v.Rows[5]; avg.Agy != "1.0h" || avg.Claude != "2.0h" {
-		t.Fatalf("avg session row = %+v", avg)
+	if hours.Cells[1].Pct != 60 || !hours.Cells[1].Leads || hours.Cells[0].Leads {
+		t.Fatalf("shares/leader = %+v", hours.Cells)
 	}
-	if v.DualHours != "1.0h" || v.DualPct != "14%" { // 1h of the 7h union (2+6-1)
+	if avg := v.Rows[5]; avg.Cells[0].Text != "1.0h" || avg.Cells[1].Text != "2.0h" || avg.Cells[2].Text != "2.0h" {
+		t.Fatalf("avg session row = %+v", avg.Cells)
+	}
+	// Ties for the top lead nobody.
+	if avg := v.Rows[5]; avg.Cells[1].Leads || avg.Cells[2].Leads {
+		t.Fatalf("tied leaders should not be highlighted: %+v", avg.Cells)
+	}
+	if v.DualHours != "1.0h" || v.DualPct != "11%" { // 1h of the 9h union (2+6+2-1)
 		t.Fatalf("dual = %s / %s", v.DualHours, v.DualPct)
 	}
-	if len(v.AgyTools) != 2 || v.AgyTools[0].Pct != 100 || v.AgyTools[1].Pct != 33 {
-		t.Fatalf("agy tools = %+v", v.AgyTools)
+	if v.Tools[0].Tools[0].Pct != 100 || v.Tools[0].Tools[1].Pct != 33 {
+		t.Fatalf("agy tools = %+v", v.Tools[0])
 	}
 
-	all := buildCompare(agg, "all")
-	if all.Rows[0].Agy != "12h" || all.DualHours != "3.0h" {
-		t.Fatalf("all-time = %+v / %s", all.Rows[0], all.DualHours)
+	two := buildCompare(agg, "all", []string{"antigravity", "claude"})
+	if two.Title != "Antigravity vs Claude Code" || two.Rows[0].Cells[0].Text != "12h" || two.DualHours != "3.0h" {
+		t.Fatalf("all-time two-agent = %+v / %s", two.Rows[0], two.DualHours)
 	}
-	if empty := buildCompare(&scanner.Aggregate{}, "7d"); empty.HasData {
+	if one := buildCompare(agg, "all", []string{"opencode"}); one.Title != "OpenCode" {
+		t.Fatalf("single agent title = %q", one.Title)
+	}
+	if empty := buildCompare(&scanner.Aggregate{}, "7d", []string{"antigravity", "claude"}); empty.HasData {
 		t.Fatal("empty aggregate should report no data")
 	}
 }
@@ -105,10 +121,10 @@ func TestShortToolAndTinyDualShare(t *testing.T) {
 		},
 		DualMs: 60_000,
 	}
-	if got := buildCompare(agg, "all").DualPct; got != "<1%" {
+	if got := buildCompare(agg, "all", []string{"antigravity", "claude"}).DualPct; got != "<1%" {
 		t.Fatalf("tiny dual share = %q, want <1%%", got)
 	}
-	if got := buildCompare(&scanner.Aggregate{}, "all").DualPct; got != "0%" {
+	if got := buildCompare(&scanner.Aggregate{}, "all", []string{"antigravity", "claude"}).DualPct; got != "0%" {
 		t.Fatalf("no dual = %q", got)
 	}
 }

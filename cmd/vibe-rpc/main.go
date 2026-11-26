@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -19,6 +21,7 @@ import (
 	"github.com/chauveaul/vibe-rpc/internal/card"
 	"github.com/chauveaul/vibe-rpc/internal/config"
 	"github.com/chauveaul/vibe-rpc/internal/daemon"
+	"github.com/chauveaul/vibe-rpc/internal/detect"
 	"github.com/chauveaul/vibe-rpc/internal/doctor"
 	"github.com/chauveaul/vibe-rpc/internal/format"
 	"github.com/chauveaul/vibe-rpc/internal/hook"
@@ -76,11 +79,7 @@ func resolveLiveState() (config.Config, *scanner.Aggregate, state.SessionState) 
 	if agg == nil {
 		agg = &scanner.Aggregate{}
 	}
-	sessions := state.ListSessions(state.ListOptions{
-		IncludeAntigravity: cfg.Sources.WantAntigravity(),
-		IncludeClaude:      cfg.Sources.WantClaude(),
-		IncludeClaudeRPC:   true,
-	})
+	sessions := state.ListSessions(presence.DiscordListOptions(cfg))
 	idleMs := int64(cfg.IdleThresholdSec) * 1000
 	if idleMs <= 0 {
 		idleMs = 60_000
@@ -126,11 +125,12 @@ func main() {
 	}
 
 	// setup / install
-	var noAutostart, noClaude bool
+	var noAutostart, noClaude, noOpenCode bool
+	var agentsFlag string
 	setupCmd := &cobra.Command{
 		Use:     "setup",
 		Aliases: []string{"install"},
-		Short:   "Wire Antigravity & Claude Code hooks, seed config, scan history, and start the daemon",
+		Short:   "Pick your coding agents, wire their hooks, seed config, scan history, and start the daemon",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fmt.Println("Setting up vibe-rpc (pure Go)...")
 			if created, err := install.SeedConfig(""); err != nil {
@@ -141,15 +141,25 @@ func main() {
 				fmt.Printf("  · config already exists at %s\n", paths.ConfigPath())
 			}
 
-			if changed, err := install.InstallAntigravityHooks("", ""); err != nil {
+			tracked, err := chooseAgents(agentsFlag, os.Stdin, os.Stdout)
+			if err != nil {
 				return err
-			} else if changed {
-				fmt.Printf("  ✓ wired Antigravity hooks in %s\n", paths.AgyHooksPath())
-			} else {
-				fmt.Printf("  · Antigravity hooks already up to date in %s\n", paths.AgyHooksPath())
+			}
+			if err := saveTrackedAgents(tracked); err != nil {
+				return err
 			}
 
-			if !noClaude {
+			if tracked["antigravity"] {
+				if changed, err := install.InstallAntigravityHooks("", ""); err != nil {
+					return err
+				} else if changed {
+					fmt.Printf("  ✓ wired Antigravity hooks in %s\n", paths.AgyHooksPath())
+				} else {
+					fmt.Printf("  · Antigravity hooks already up to date in %s\n", paths.AgyHooksPath())
+				}
+			}
+
+			if !noClaude && tracked["claude"] {
 				if changed, err := install.InstallClaudeHooks("", ""); err != nil {
 					fmt.Printf("  ! skipped Claude Code hooks: %v\n", err)
 				} else if changed {
@@ -159,6 +169,15 @@ func main() {
 				}
 			}
 
+			if !noOpenCode && tracked["opencode"] && scanner.OpenCodeBinary() != "" {
+				if changed, err := install.InstallOpenCodePlugin(""); err != nil {
+					fmt.Printf("  ! OpenCode plugin: %v\n", err)
+				} else if changed {
+					fmt.Printf("  ✓ installed OpenCode plugin at %s\n", install.OpenCodePluginPath())
+				} else {
+					fmt.Println("  ✓ OpenCode plugin already installed")
+				}
+			}
 			if err := install.SelfTestHooks(); err != nil {
 				return err
 			}
@@ -188,6 +207,8 @@ func main() {
 	}
 	setupCmd.Flags().BoolVar(&noAutostart, "no-autostart", false, "Skip installing OS login autostart")
 	setupCmd.Flags().BoolVar(&noClaude, "no-claude", false, "Skip wiring Claude Code hooks")
+	setupCmd.Flags().BoolVar(&noOpenCode, "no-opencode", false, "Skip installing the OpenCode plugin")
+	setupCmd.Flags().StringVar(&agentsFlag, "agents", "", "Agents to track, comma-separated: antigravity,claude,opencode (or \"all\"); asks interactively if omitted")
 
 	// uninstall
 	uninstallCmd := &cobra.Command{
@@ -207,6 +228,9 @@ func main() {
 				fmt.Println("✓ Removed vibe-rpc's Antigravity CLI status line")
 			}
 			notch.Quit()
+			if ok, _ := install.UninstallOpenCodePlugin(); ok {
+				fmt.Println("✓ Removed the OpenCode plugin")
+			}
 			if ok, _ := install.UninstallClaudeHooks(""); ok {
 				fmt.Printf("  ✓ removed Claude Code hooks from %s\n", paths.ClaudeSettingsPath())
 			}
@@ -1073,4 +1097,97 @@ func readPipedStdin(timeout time.Duration, limit int64) []byte {
 	case <-time.After(timeout):
 		return nil
 	}
+}
+
+// chooseAgents decides which agents setup tracks: from --agents, otherwise by
+// asking in a terminal (defaulting to what's installed and already tracked),
+// otherwise silently using installed agents that are tracked in config.
+func chooseAgents(flag string, in *os.File, out io.Writer) (map[string]bool, error) {
+	all := detect.All()
+	cfg := config.Load()
+	tracked := map[string]bool{}
+
+	if flag = strings.TrimSpace(flag); flag != "" {
+		if flag == "all" {
+			for _, a := range all {
+				tracked[a.Key] = true
+			}
+			return tracked, nil
+		}
+		for _, k := range strings.Split(flag, ",") {
+			k = strings.ToLower(strings.TrimSpace(k))
+			switch k {
+			case "agy":
+				k = "antigravity"
+			case "claude-code", "claudecode":
+				k = "claude"
+			}
+			if !slices.Contains(config.Agents, k) {
+				return nil, fmt.Errorf("unknown agent %q (use antigravity, claude, opencode)", k)
+			}
+			tracked[k] = true
+		}
+		return tracked, nil
+	}
+
+	fmt.Fprintln(out, "  Coding agents on this machine:")
+	for _, a := range all {
+		where := "not found"
+		if a.Installed {
+			where = a.Where
+		}
+		fmt.Fprintf(out, "    %-12s %s\n", a.Name, where)
+	}
+
+	interactive := false
+	if fi, err := in.Stat(); err == nil && fi.Mode()&os.ModeCharDevice != 0 {
+		interactive = true
+	}
+	reader := bufio.NewReader(in)
+	for _, a := range all {
+		def := a.Installed && cfg.Sources.Tracks(a.Key)
+		if !interactive {
+			tracked[a.Key] = def
+			continue
+		}
+		hint := "[Y/n]"
+		if !def {
+			hint = "[y/N]"
+		}
+		fmt.Fprintf(out, "  Track %s? %s ", a.Name, hint)
+		line, _ := reader.ReadString('\n')
+		switch strings.ToLower(strings.TrimSpace(line)) {
+		case "y", "yes":
+			tracked[a.Key] = true
+		case "n", "no":
+			tracked[a.Key] = false
+		default:
+			tracked[a.Key] = def
+		}
+	}
+	var names []string
+	for _, a := range all {
+		if tracked[a.Key] {
+			names = append(names, a.Name)
+		}
+	}
+	if len(names) == 0 {
+		fmt.Fprintln(out, "  ! no agents selected; vibe-rpc won't track anything until you enable one in Settings")
+	} else {
+		fmt.Fprintf(out, "  ✓ tracking %s (change anytime in Settings → Agents)\n", strings.Join(names, ", "))
+	}
+	return tracked, nil
+}
+
+// saveTrackedAgents persists the tracking choice without freezing defaults.
+func saveTrackedAgents(tracked map[string]bool) error {
+	base := config.Load()
+	edited := base.Clone()
+	edited.Sources = config.SourcesConfig{
+		Antigravity: config.BoolPtr(tracked["antigravity"]),
+		Claude:      config.BoolPtr(tracked["claude"]),
+		OpenCode:    config.BoolPtr(tracked["opencode"]),
+	}
+	_, err := config.SaveDiff(paths.ConfigPath(), base, edited)
+	return err
 }

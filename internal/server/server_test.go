@@ -377,3 +377,35 @@ func TestTopModelForSplitsByFamily(t *testing.T) {
 		t.Fatalf("antigravity: got %q", got)
 	}
 }
+
+func TestSettingsAgentsTable(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("VIBE_RPC_CONFIG", filepath.Join(tmp, "config.json"))
+	t.Setenv("VIBE_RPC_STATE_DIR", filepath.Join(tmp, "state"))
+	t.Setenv("VIBE_RPC_DATA_DIR", filepath.Join(tmp, "data"))
+	h := NewHandler()
+
+	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:47475/settings", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	for _, want := range []string{`name="track_opencode"`, `name="discord_claude"`, "OpenCode"} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("settings page missing %q", want)
+		}
+	}
+
+	form := baseSettingsForm()
+	form.Set("agents_section", "1")
+	form.Set("track_antigravity", "on")
+	form.Set("track_claude", "on")
+	form.Set("discord_antigravity", "on")
+	form.Set("discord_opencode", "on") // ignored: OpenCode isn't tracked
+	postSettings(t, h, "/settings/save", form)
+	c := config.Load()
+	if !c.Sources.Tracks("claude") || c.Sources.Tracks("opencode") {
+		t.Fatalf("tracking = %+v", c.Sources)
+	}
+	if c.ShowOnDiscord("claude") || !c.ShowOnDiscord("antigravity") || c.ShowOnDiscord("opencode") {
+		t.Fatalf("discord = claude:%v agy:%v oc:%v", c.ShowOnDiscord("claude"), c.ShowOnDiscord("antigravity"), c.ShowOnDiscord("opencode"))
+	}
+}

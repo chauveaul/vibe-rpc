@@ -21,6 +21,7 @@ import (
 	"github.com/chauveaul/vibe-rpc/internal/card"
 	"github.com/chauveaul/vibe-rpc/internal/config"
 	"github.com/chauveaul/vibe-rpc/internal/daemon"
+	"github.com/chauveaul/vibe-rpc/internal/detect"
 	"github.com/chauveaul/vibe-rpc/internal/doctor"
 	"github.com/chauveaul/vibe-rpc/internal/format"
 	"github.com/chauveaul/vibe-rpc/internal/install"
@@ -64,6 +65,13 @@ var BuiltinGifs = []struct {
 	{"notification", "claude", "Waiting", "claude-notification.gif"},
 	{"idle", "claude", "Idle", "claude-idle.gif"},
 	{"stale", "claude", "Away", "claude-stale.gif"},
+	{"working", "opencode", "Working", "opencode-working.gif"},
+	{"thinking", "opencode", "Thinking", "opencode-thinking.gif"},
+	{"compacting", "opencode", "Compacting", "opencode-compacting.gif"},
+	{"shipped", "opencode", "Shipped", "opencode-shipped.gif"},
+	{"notification", "opencode", "Waiting", "opencode-notification.gif"},
+	{"idle", "opencode", "Idle", "opencode-idle.gif"},
+	{"stale", "opencode", "Away", "opencode-stale.gif"},
 }
 
 // ExportGifs writes all embedded Antigravity animated GIFs to dir.
@@ -149,11 +157,8 @@ func loadLive() (config.Config, *scanner.Aggregate, state.SessionState) {
 	if agg == nil {
 		agg = &scanner.Aggregate{}
 	}
-	sessions := state.ListSessions(state.ListOptions{
-		IncludeAntigravity: cfg.Sources.WantAntigravity(),
-		IncludeClaude:      cfg.Sources.WantClaude(),
-		IncludeClaudeRPC:   true,
-	})
+	// Mirrors the daemon: the live card only shows agents allowed on Discord.
+	sessions := state.ListSessions(presence.DiscordListOptions(cfg))
 	idleMs := int64(cfg.IdleThresholdSec) * 1000
 	if idleMs <= 0 {
 		idleMs = 60_000
@@ -266,7 +271,7 @@ func NewHandler() http.Handler {
 // IsRunningAt reports whether a vibe-rpc dashboard already answers at addr,
 // so `vibe-rpc serve` can reuse it instead of failing to bind.
 func IsRunningAt(addr string) bool {
-	c := &http.Client{Timeout: 800 * time.Millisecond}
+	c := &http.Client{Timeout: 2 * time.Second} // /api/state scans processes; allow for a busy machine
 	resp, err := c.Get("http://" + addr + "/api/state")
 	if err != nil {
 		return false
@@ -656,7 +661,7 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 		todayCost = pricing.FmtCost(todayB.Cost)
 	}
 
-	cmp := buildCompare(agg, rng)
+	cmp := buildCompare(agg, rng, trackedAgents(cfg))
 	quotas := buildDashboardQuotas(
 		cfg, agg,
 		limits.Load(), install.ClaudeStatusLineState(""),
@@ -1068,7 +1073,11 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 	if cfg.ClaudeStatusAssets != nil {
 		curClaudeImg = cfg.ClaudeStatusAssets[selStatus]
 	}
-	var agyGifs, claudeGifs, dualGifs []gifView
+	curOCImg := ""
+	if cfg.OpenCodeStatusAssets != nil {
+		curOCImg = cfg.OpenCodeStatusAssets[selStatus]
+	}
+	var agyGifs, claudeGifs, ocGifs, dualGifs []gifView
 	for _, g := range BuiltinGifs {
 		p := "/assets/gifs/" + g.File
 		switch g.Group {
@@ -1077,6 +1086,8 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 			dualGifs = append(dualGifs, gifView{Label: "Agy " + g.Label, Path: p, Active: curImg == p})
 		case "claude":
 			claudeGifs = append(claudeGifs, gifView{Label: g.Label, Path: p, Active: curClaudeImg == p})
+		case "opencode":
+			ocGifs = append(ocGifs, gifView{Label: g.Label, Path: p, Active: curOCImg == p})
 		case "dual":
 			// Place Dual Wielding GIF first in the Dual gallery
 			dualGifs = append([]gifView{{Label: "Dual Wield", Path: p, Active: curImg == p}}, dualGifs...)
@@ -1120,59 +1131,63 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 	varsJSONSafe := strings.ReplaceAll(string(varsJSONBytes), "</", `<\/`)
 
 	data := map[string]any{
-		"Saved":             r.URL.Query().Get("saved") == "1",
-		"Error":             r.URL.Query().Get("err"),
-		"ConfigPath":        paths.ConfigPath(),
-		"LogPath":           paths.LogPath(),
-		"LogTail":           logTail,
-		"DaemonDot":         dDot,
-		"DaemonTitle":       dTitle,
-		"DaemonSub":         dSub,
-		"Status":            selStatus,
-		"StatusTabs":        tabs,
-		"PreviewAppName":    previewApp,
-		"PreviewImage":      presence.ResolveLargeImageKeyForSource(cfg, previewSource, effStatus, previewSt.Model),
-		"PreviewDetails":    format.FillTemplate(effTpl.Details, vars),
-		"PreviewState":      format.FillTemplate(effTpl.State, vars),
-		"Agent":             selAgent,
-		"AgentTabs":         agentTabs(selAgent),
-		"PreviewBecameDual": effStatus == "dual" && selStatus != "dual",
-		"PreviewImageInput": previewImageInput(selAgent, selStatus, effStatus),
-		"PreviewAppLive":    !previewSt.ClaudeActive || !cfg.IsDynamicAppName(),
-		"PreviewVarsJSON":   template.JS(varsJSONSafe),
-		"StatusDetails":     stTpl.Details,
-		"StatusState":       stTpl.State,
-		"StatusImage":       curImg,
-		"ClaudeStatusImage": curClaudeImg,
-		"StatusLargeText":   stTpl.LargeImageText,
-		"BuiltinAgyGifs":    agyGifs,
-		"BuiltinClaudeGifs": claudeGifs,
-		"DualGifs":          dualGifs,
-		"Frames":            frames,
-		"Buttons":           btns,
-		"VarSamples":        samples,
-		"Cfg":               cfg,
-		"RotationSec":       cfg.RotationIntervalMs / 1000,
-		"Workspaces":        discoverWorkspaces(cfg),
-		"Notice":            r.URL.Query().Get("notice"),
-		"NotchSupported":    notch.Supported(),
-		"NotchInstalled":    notch.Find(exeOrEmpty()) != "",
-		"NotchRunning":      notch.Running(),
-		"ClaudeStatusLine":  install.ClaudeStatusLineState(""),
-		"AgyStatusLine":     install.AgyStatusLineState(""),
-		"GoalDailyHours":    fmtNum(cfg.Goals.DailyHours),
-		"GoalDailyPrompts":  fmtNum(float64(cfg.Goals.DailyPrompts)),
-		"GoalWeeklyHours":   fmtNum(cfg.Goals.WeeklyHours),
-		"GoalLabel":         fmt.Sprint(vars["goalLabel"]),
-		"BudgetMonthly":     fmtNum(cfg.Budget.Monthly),
-		"BudgetWarnPct":     warnPct,
-		"BudgetMTD":         pricing.FmtCost(mtd),
-		"BudgetPct":         budgetPct,
-		"BudgetBar":         budgetBar,
-		"BudgetLevel":       budgetLevel,
-		"WebhookEvents":     whEvents,
-		"Triggers":          trigs,
-		"TriggerFrameSec":   cfg.TriggerFrameSec,
+		"Saved":               r.URL.Query().Get("saved") == "1",
+		"Error":               r.URL.Query().Get("err"),
+		"ConfigPath":          paths.ConfigPath(),
+		"LogPath":             paths.LogPath(),
+		"LogTail":             logTail,
+		"DaemonDot":           dDot,
+		"DaemonTitle":         dTitle,
+		"DaemonSub":           dSub,
+		"Status":              selStatus,
+		"StatusTabs":          tabs,
+		"PreviewAppName":      previewApp,
+		"PreviewImage":        presence.ResolveLargeImageKeyForSource(cfg, previewSource, effStatus, previewSt.Model),
+		"PreviewDetails":      format.FillTemplate(effTpl.Details, vars),
+		"PreviewState":        format.FillTemplate(effTpl.State, vars),
+		"Agent":               selAgent,
+		"AgentTabs":           agentTabs(selAgent),
+		"PreviewBecameDual":   effStatus == "dual" && selStatus != "dual",
+		"PreviewImageInput":   previewImageInput(selAgent, selStatus, effStatus),
+		"PreviewAppLive":      !previewSt.ClaudeActive || !cfg.IsDynamicAppName(),
+		"PreviewVarsJSON":     template.JS(varsJSONSafe),
+		"StatusDetails":       stTpl.Details,
+		"StatusState":         stTpl.State,
+		"StatusImage":         curImg,
+		"ClaudeStatusImage":   curClaudeImg,
+		"StatusLargeText":     stTpl.LargeImageText,
+		"BuiltinAgyGifs":      agyGifs,
+		"BuiltinClaudeGifs":   claudeGifs,
+		"BuiltinOpenCodeGifs": ocGifs,
+		"OpenCodeStatusImage": curOCImg,
+		"ShowOpenCodeGifs":    cfg.Sources.Tracks("opencode"),
+		"DualGifs":            dualGifs,
+		"Frames":              frames,
+		"Buttons":             btns,
+		"VarSamples":          samples,
+		"Cfg":                 cfg,
+		"RotationSec":         cfg.RotationIntervalMs / 1000,
+		"Workspaces":          discoverWorkspaces(cfg),
+		"Notice":              r.URL.Query().Get("notice"),
+		"Agents":              agentRows(cfg),
+		"NotchSupported":      notch.Supported(),
+		"NotchInstalled":      notch.Find(exeOrEmpty()) != "",
+		"NotchRunning":        notch.Running(),
+		"ClaudeStatusLine":    install.ClaudeStatusLineState(""),
+		"AgyStatusLine":       install.AgyStatusLineState(""),
+		"GoalDailyHours":      fmtNum(cfg.Goals.DailyHours),
+		"GoalDailyPrompts":    fmtNum(float64(cfg.Goals.DailyPrompts)),
+		"GoalWeeklyHours":     fmtNum(cfg.Goals.WeeklyHours),
+		"GoalLabel":           fmt.Sprint(vars["goalLabel"]),
+		"BudgetMonthly":       fmtNum(cfg.Budget.Monthly),
+		"BudgetWarnPct":       warnPct,
+		"BudgetMTD":           pricing.FmtCost(mtd),
+		"BudgetPct":           budgetPct,
+		"BudgetBar":           budgetBar,
+		"BudgetLevel":         budgetLevel,
+		"WebhookEvents":       whEvents,
+		"Triggers":            trigs,
+		"TriggerFrameSec":     cfg.TriggerFrameSec,
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = settingsTpl.Execute(w, data)
@@ -1196,6 +1211,12 @@ func parseSettingsForm(r *http.Request, base config.Config) (config.Config, stri
 
 	if img := strings.TrimSpace(r.FormValue("status_image")); img != "" {
 		edited.StatusAssets[selStatus] = img
+	}
+	if oImg := strings.TrimSpace(r.FormValue("opencode_status_image")); oImg != "" && selStatus != "dual" {
+		if edited.OpenCodeStatusAssets == nil {
+			edited.OpenCodeStatusAssets = map[string]string{}
+		}
+		edited.OpenCodeStatusAssets[selStatus] = oImg
 	}
 	if cImg := strings.TrimSpace(r.FormValue("claude_status_image")); cImg != "" && selStatus != "dual" {
 		if edited.ClaudeStatusAssets == nil {
@@ -1238,9 +1259,17 @@ func parseSettingsForm(r *http.Request, base config.Config) (config.Config, stri
 	}
 	edited.ShowElapsed = config.BoolPtr(r.FormValue("showElapsed") == "on")
 	edited.Presence.GithubButton = config.BoolPtr(r.FormValue("githubButton") == "on")
-	edited.Sources = config.SourcesConfig{
-		Antigravity: config.BoolPtr(r.FormValue("sourceAntigravity") == "on"),
-		Claude:      config.BoolPtr(r.FormValue("sourceClaude") == "on"),
+	if r.FormValue("agents_section") == "1" {
+		on := func(k string) *bool { return config.BoolPtr(r.FormValue(k) == "on") }
+		edited.Sources = config.SourcesConfig{Antigravity: on("track_antigravity"), Claude: on("track_claude"), OpenCode: on("track_opencode")}
+		edited.DiscordSources = config.DiscordSourcesConfig{Antigravity: on("discord_antigravity"), Claude: on("discord_claude"), OpenCode: on("discord_opencode")}
+	} else if r.FormValue("sourceAntigravity") != "" || r.FormValue("sourceClaude") != "" || r.FormValue("sourceOpenCode") != "" {
+		// Older forms with plain "Track …" checkboxes.
+		edited.Sources = config.SourcesConfig{
+			Antigravity: config.BoolPtr(r.FormValue("sourceAntigravity") == "on"),
+			Claude:      config.BoolPtr(r.FormValue("sourceClaude") == "on"),
+			OpenCode:    config.BoolPtr(r.FormValue("sourceOpenCode") == "on"),
+		}
 	}
 	edited.DynamicAppName = config.BoolPtr(r.FormValue("dynamicAppName") == "on")
 
@@ -1439,6 +1468,11 @@ func handleSettingsGifPick(w http.ResponseWriter, r *http.Request) {
 					edited.ClaudeStatusAssets = map[string]string{}
 				}
 				edited.ClaudeStatusAssets[selStatus] = gifPath
+			} else if target == "opencode" && selStatus != "dual" {
+				if edited.OpenCodeStatusAssets == nil {
+					edited.OpenCodeStatusAssets = map[string]string{}
+				}
+				edited.OpenCodeStatusAssets[selStatus] = gifPath
 			} else {
 				if edited.StatusAssets == nil {
 					edited.StatusAssets = map[string]string{}
@@ -1848,4 +1882,21 @@ func handleAPIDay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, d)
+}
+
+type agentRow struct {
+	Key, Name, Where          string
+	Installed, Track, Discord bool
+}
+
+// agentRows feeds the Settings → Agents table.
+func agentRows(cfg config.Config) []agentRow {
+	var rows []agentRow
+	for _, a := range detect.All() {
+		rows = append(rows, agentRow{
+			Key: a.Key, Name: a.Name, Where: a.Where, Installed: a.Installed,
+			Track: cfg.Sources.Tracks(a.Key), Discord: cfg.ShowOnDiscord(a.Key),
+		})
+	}
+	return rows
 }

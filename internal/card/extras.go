@@ -14,6 +14,7 @@ import (
 
 	"golang.org/x/image/font"
 
+	"github.com/chauveaul/vibe-rpc/internal/config"
 	"github.com/chauveaul/vibe-rpc/internal/format"
 	"github.com/chauveaul/vibe-rpc/internal/scanner"
 	"github.com/chauveaul/vibe-rpc/internal/state"
@@ -227,7 +228,11 @@ func RenderHeatmap(agg *scanner.Aggregate, now time.Time, scale float64) (*image
 	}
 	c.text("Less", sx-8-lessW, fy, legF, uni(colMute), 0.2)
 
-	c.footerBar(HeatmapWidth, HeatmapHeight, "github.com/chauveaul/vibe-rpc", "ANTIGRAVITY + CLAUDE CODE")
+	var names []string
+	for _, a := range format.ActiveAgents(agg) {
+		names = append(names, strings.ToUpper(config.AgentName(a)))
+	}
+	c.footerBar(HeatmapWidth, HeatmapHeight, "github.com/chauveaul/vibe-rpc", strings.Join(names, " + "))
 	return c.img, nil
 }
 

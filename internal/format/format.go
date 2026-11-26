@@ -549,19 +549,29 @@ func BuildVars(st state.SessionState, cfg config.Config, agg *scanner.Aggregate)
 		liveSrcs["claude"] = true
 	}
 	for _, ls := range st.LiveSessions {
-		if ls.Source == "claude" {
-			liveSrcs["claude"] = true
-		} else {
+		switch ls.Source {
+		case "claude", "opencode", "codex":
+			liveSrcs[ls.Source] = true
+		default:
 			liveSrcs["antigravity"] = true
 		}
 	}
 	sourcesActiveLabel := sourcePretty
-	if len(liveSrcs) > 1 {
+	switch {
+	case len(liveSrcs) == 2 && liveSrcs["antigravity"] && liveSrcs["claude"]:
 		sourcesActiveLabel = "Antigravity & Claude"
-	} else if liveSrcs["claude"] {
-		sourcesActiveLabel = "Claude Code"
-	} else if liveSrcs["antigravity"] {
-		sourcesActiveLabel = "Antigravity"
+	case len(liveSrcs) > 1:
+		var names []string
+		for _, a := range config.Agents {
+			if liveSrcs[a] {
+				names = append(names, config.AgentName(a))
+			}
+		}
+		sourcesActiveLabel = strings.Join(names, " & ")
+	case len(liveSrcs) == 1:
+		for a := range liveSrcs {
+			sourcesActiveLabel = config.AgentName(a)
+		}
 	}
 
 	agySrc := agg.BySource["antigravity"]
@@ -1016,4 +1026,19 @@ func ApplyTrigger(st state.SessionState, cfg config.Config) state.SessionState {
 		}
 	}
 	return st
+}
+
+// ActiveAgents returns the agents with recorded sessions in agg, in display
+// order.
+func ActiveAgents(agg *scanner.Aggregate) []string {
+	if agg == nil {
+		return nil
+	}
+	var out []string
+	for _, a := range config.Agents {
+		if s := agg.BySource[a]; s != nil && (s.Sessions > 0 || s.ActiveMs > 0) {
+			out = append(out, a)
+		}
+	}
+	return out
 }

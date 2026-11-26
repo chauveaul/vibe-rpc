@@ -54,3 +54,21 @@ func TestShowOnDiscordNeedsTrackingAndPermission(t *testing.T) {
 		t.Fatal("antigravity unaffected")
 	}
 }
+
+func TestJoinAgentNames(t *testing.T) {
+	cases := []struct {
+		keys []string
+		conj string
+		want string
+	}{
+		{nil, "or", ""},
+		{[]string{"codex"}, "or", "Codex"},
+		{[]string{"antigravity", "claude"}, "or", "Antigravity or Claude Code"},
+		{[]string{"antigravity", "claude", "opencode", "codex"}, "and", "Antigravity, Claude Code, OpenCode and Codex"},
+	}
+	for _, c := range cases {
+		if got := JoinAgentNames(c.keys, c.conj); got != c.want {
+			t.Errorf("JoinAgentNames(%v, %q) = %q, want %q", c.keys, c.conj, got, c.want)
+		}
+	}
+}

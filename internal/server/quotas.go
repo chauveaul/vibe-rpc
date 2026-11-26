@@ -114,7 +114,7 @@ func buildDashboardQuotas(
 	} else {
 		switch ccStatusLine {
 		case "vibe-rpc":
-			v.ClaudeHint = "Wired up — limits appear after Claude Code's next reply."
+			v.ClaudeHint = "Connected. Limits appear after Claude Code's next reply."
 		case "other":
 			v.ClaudeHint = "Custom Claude Code status line in use."
 		default:
@@ -151,7 +151,7 @@ func buildDashboardQuotas(
 		}}
 		switch agyStatusLine {
 		case "vibe-rpc":
-			v.AgyHint = "Wired up — real quotas appear after Antigravity CLI's next reply."
+			v.AgyHint = "Connected. Quotas appear after Antigravity CLI's next reply."
 		case "other":
 			v.AgyHint = "Custom Antigravity CLI status line in use."
 		default:

@@ -22,7 +22,7 @@
       <a class="brand" href="/">
         <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.2" r="1.4" fill="#fff" stroke="none"/><path d="M9.4 7.5 12 13.2 14.6 7.5" stroke-width="1.6" opacity="0.65"/><path d="M5.5 7.5 12 20 18.5 7.5"/></svg></span>
         <span>vibe-rpc</span>
-        <span class="sub-tag">Antigravity</span>
+        <span class="sub-tag">Dashboard</span>
       </a>
       <div class="top-right">
         <nav class="range-pills" aria-label="Time range">
@@ -54,7 +54,7 @@
     <section class="running" aria-labelledby="running-h">
       <div class="section-head">
         <h2 id="running-h">Running now</h2>
-        <span class="right">{{len .Running}} open session{{if ne (len .Running) 1}}s{{end}} · refreshes every 10s</span>
+        <span class="right">{{len .Running}} open session{{if ne (len .Running) 1}}s{{end}} {{if .AutoRefresh}} · refreshes every 10s{{end}}</span>
       </div>
       {{if .Running}}
       <ul class="run-list">
@@ -75,7 +75,7 @@
         {{end}}
       </ul>
       {{else}}
-      <div class="run-empty">No sessions running. Open Antigravity or Claude Code and they'll show up here.</div>
+      <div class="run-empty">No sessions running. Open {{.AgentsOr}} and they'll show up here.</div>
       {{end}}
     </section>
 
@@ -89,7 +89,7 @@
 
     <section class="hero">
       <div>
-        <div class="eyebrow">{{.RangeTitle}} Active Coding</div>
+        <div class="eyebrow">Active coding · {{.RangeTitle}}</div>
         <div class="figure num">{{.HeroHours}}</div>
         <div class="caption">{{.HeroCaption}}</div>
       </div>
@@ -130,7 +130,7 @@
     <div class="split-row quota-row">
       <div class="card">
         <div class="card-h">
-          <h3>Usage Quotas</h3>
+          <h3>Usage quotas</h3>
           <span class="meta">{{if .Quotas.AgyPlan}}{{.Quotas.AgyPlan}} · {{end}}<a href="/settings">Configure →</a></span>
         </div>
         <div class="quota-groups">
@@ -168,7 +168,7 @@
 
       <div class="card">
         <div class="card-h">
-          <h3>Goals &amp; Monthly Budget</h3>
+          <h3>Goals &amp; monthly budget</h3>
           <span class="meta"><a href="/settings">Edit in Settings →</a></span>
         </div>
         <div class="goal-stack">
@@ -255,7 +255,7 @@
 
     <section>
       <div class="section-head">
-        <h2>Last 12 Months</h2>
+        <h2>Last 12 months</h2>
         <span class="right">Click any day for breakdown</span>
       </div>
       <div class="card heatmap-card">
@@ -282,7 +282,7 @@
     <div class="split-row">
       <div class="card">
         <div class="card-h">
-          <h3>Model Split</h3>
+          <h3>Model split</h3>
           <span class="meta">All-time API equivalent</span>
         </div>
         <div class="cost-grid">
@@ -332,7 +332,7 @@
 
     <section>
       <div class="section-head">
-        <h2>Code Churn</h2>
+        <h2>Code churn</h2>
         <span class="right">{{.RangeShips}} ships in window</span>
       </div>
       <div class="card">
@@ -393,7 +393,7 @@
           </table>
         </div>
         <div class="lb">
-          <div class="lb-h"><span class="t">Hotspot Files</span><span class="s">Edits</span></div>
+          <div class="lb-h"><span class="t">Hotspot files</span><span class="s">Edits</span></div>
           <table>
             {{range .TopFiles}}
               <tr><td class="name" title="{{.Full}}">{{.Name}}</td><td class="val num">{{.Value}}</td></tr>
@@ -403,7 +403,7 @@
           </table>
         </div>
         <div class="lb">
-          <div class="lb-h"><span class="t">Shell Commands</span><span class="s">Runs</span></div>
+          <div class="lb-h"><span class="t">Shell commands</span><span class="s">Runs</span></div>
           <table>
             {{range .TopShell}}
               <tr><td class="name">{{.Name}}</td><td class="val num">{{.Value}}</td></tr>
@@ -413,7 +413,7 @@
           </table>
         </div>
         <div class="lb">
-          <div class="lb-h"><span class="t">Web Domains</span><span class="s">Fetches</span></div>
+          <div class="lb-h"><span class="t">Web domains</span><span class="s">Fetches</span></div>
           <table>
             {{range .TopDomains}}
               <tr><td class="name">{{.Name}}</td><td class="val num">{{.Value}}</td></tr>
@@ -437,7 +437,7 @@
 
     <section>
       <div class="section-head">
-        <h2>Discord Rotation Frames</h2>
+        <h2>Discord rotation frames</h2>
         <span class="right">Status: {{.Status}}</span>
       </div>
       <div class="discord">
@@ -453,7 +453,7 @@
     </section>
 
     <footer>
-      <span>vibe-rpc v{{.Version}} · Pure Go SSR (0 bytes JS)</span>
+      <span>vibe-rpc v{{.Version}}</span>
       <span>
         <a href="/api/badge.svg">badge.svg</a> ·
         <a href="/api/card.png">card.png</a> ·

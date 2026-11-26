@@ -503,16 +503,16 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 		{Key: "1y", Label: "1Y", Active: rng == "1y"},
 		{Key: "all", Label: "All", Active: rng == "all"},
 	}
-	rangeTitles := map[string]string{"7d": "Last 7 Days", "30d": "Last 30 Days", "90d": "Last 90 Days", "1y": "Last Year", "all": "All-Time"}
+	rangeTitles := map[string]string{"7d": "Last 7 days", "30d": "Last 30 days", "90d": "Last 90 days", "1y": "Last year", "all": "All time"}
 	rangeTitle := rangeTitles[rng]
 	if rangeTitle == "" {
-		rangeTitle = "Last 30 Days"
+		rangeTitle = "Last 30 days"
 	}
 
 	// Live preview
 	liveApp := cfg.AppName
 	liveDet := "Away — no active session"
-	liveState := "Open Antigravity or Claude Code to start tracking"
+	liveState := "Open " + agentsOr(cfg) + " to start tracking"
 	liveImg := presence.ResolveLargeImageKeyForSource(cfg, st.Source, st.Status, st.Model)
 	if act != nil {
 		liveApp = act.Name
@@ -688,6 +688,7 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 		"LiveAppName":      liveApp,
 		"LiveDetails":      liveDet,
 		"LiveState":        liveState,
+		"AgentsOr":         agentsOr(cfg),
 		"LiveSource":       vars["sourcePretty"],
 		"LiveModel":        vars["modelPretty"],
 		"LiveElapsed":      vars["duration"],
@@ -915,6 +916,14 @@ func fmtNum(v float64) string {
 }
 
 // monthToDateCost sums cost for the current calendar month.
+// agentsOr names the tracked agents as "A, B or C" for empty-state copy.
+func agentsOr(cfg config.Config) string {
+	if names := config.JoinAgentNames(trackedAgents(cfg), "or"); names != "" {
+		return names
+	}
+	return "a coding agent"
+}
+
 func monthToDateCost(agg *scanner.Aggregate) float64 {
 	if agg == nil {
 		return 0
@@ -1009,7 +1018,7 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 		if ipcState == "connected" {
 			dDot = "up"
 			dTitle = fmt.Sprintf("Running & connected to Discord (pid %d)", pid)
-			dSub = "Watching Antigravity & Claude Code sessions live"
+			dSub = "Watching " + config.JoinAgentNames(trackedAgents(cfg), "and") + " sessions live"
 		} else {
 			dDot = "wait"
 			dTitle = fmt.Sprintf("Running — waiting for Discord (pid %d)", pid)
@@ -1152,6 +1161,7 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 		"DaemonDot":           dDot,
 		"DaemonTitle":         dTitle,
 		"DaemonSub":           dSub,
+		"AgentsOr":            agentsOr(cfg),
 		"Status":              selStatus,
 		"StatusTabs":          tabs,
 		"PreviewAppName":      previewApp,
@@ -1672,13 +1682,10 @@ func handleWrapped(w http.ResponseWriter, r *http.Request) {
 	}
 
 	allTok := agg.InputTokens + agg.OutputTokens + agg.CacheReadTokens + agg.CacheWriteTokens
-	agy := agg.BySource["antigravity"]
-	cc := agg.BySource["claude"]
-	if agy == nil {
-		agy = &scanner.SourceStats{}
-	}
-	if cc == nil {
-		cc = &scanner.SourceStats{}
+	active := format.ActiveAgents(agg)
+	var split []string // "Antigravity 12h", one per agent with sessions
+	for _, a := range active {
+		split = append(split, config.AgentName(a)+" "+format.FmtHours(agg.BySource[a].ActiveMs))
 	}
 
 	data := map[string]any{
@@ -1696,8 +1703,15 @@ func handleWrapped(w http.ResponseWriter, r *http.Request) {
 	switch idx {
 	case 0:
 		data["Theme"] = "ink"
-		data["Badge"] = "Your Coding Story"
-		data["Kicker"] = "Across Antigravity and Claude Code, you coded for"
+		data["Badge"] = "All-time recap"
+		switch len(active) {
+		case 0:
+			data["Kicker"] = "You coded for"
+		case 1:
+			data["Kicker"] = "In " + config.AgentName(active[0]) + ", you coded for"
+		default:
+			data["Kicker"] = "Across " + config.JoinAgentNames(active, "and") + ", you coded for"
+		}
 		data["Figure"] = format.FmtHours(agg.ActiveMs)
 		data["Watermark"] = format.FmtHours(agg.ActiveMs)
 		data["Sub"] = fmt.Sprintf("%d sessions · %s prompts · %s tool calls", agg.Sessions, format.FmtNum(int64(agg.UserMessages)), format.FmtNum(int64(agg.ToolCalls)))
@@ -1712,7 +1726,7 @@ func handleWrapped(w http.ResponseWriter, r *http.Request) {
 		data["Kicker"] = "Your longest coding streak"
 		data["Figure"] = fmt.Sprintf("%dd", agg.LongestStreak)
 		data["Watermark"] = fmt.Sprintf("%d", agg.LongestStreak)
-		best := "Keep going to set your first record!"
+		best := "No best day recorded yet"
 		if agg.BestDay != nil {
 			best = fmt.Sprintf("Biggest day: %s (%s)", agg.BestDay.Day, format.FmtHours(agg.BestDay.ActiveMs))
 		}
@@ -1721,7 +1735,7 @@ func handleWrapped(w http.ResponseWriter, r *http.Request) {
 		data["Theme"] = "blurple"
 		data["Kicker"] = "Your model mix"
 		data["FigureClass"] = "big"
-		topM := "Gemini & Claude"
+		topM := "None yet"
 		if len(agg.ModelSplit) > 0 {
 			topM = format.HumanModel(agg.ModelSplit[0].Model)
 		}
@@ -1734,7 +1748,7 @@ func handleWrapped(w http.ResponseWriter, r *http.Request) {
 			mrows = append(mrows, modelRow{Name: format.HumanModel(m.Model), Pct: int(math.Round(m.CostPct * 100))})
 		}
 		data["ModelRows"] = mrows
-		data["Sub"] = fmt.Sprintf("Antigravity %s · Claude Code %s", format.FmtHours(agy.ActiveMs), format.FmtHours(cc.ActiveMs))
+		data["Sub"] = strings.Join(split, " · ")
 	case 4:
 		data["Theme"] = "grass"
 		data["Kicker"] = "Code you wrote & shipped"
@@ -1743,12 +1757,12 @@ func handleWrapped(w http.ResponseWriter, r *http.Request) {
 		data["Sub"] = fmt.Sprintf("lines added · -%s removed · %d ships", format.FmtNum(int64(agg.LinesRemoved)), agg.Ships)
 	case 5:
 		data["Theme"] = "plum"
-		data["Kicker"] = "Your most-edited hotspot"
+		data["Kicker"] = "Your most-edited file"
 		data["FigureClass"] = "big"
-		topFile, sub := "None yet", "Edit files in a session to unlock hotspots"
+		topFile, sub := "None yet", "No file edits recorded yet"
 		if len(agg.TopEditedFiles) > 0 {
 			topFile = filepath.Base(agg.TopEditedFiles[0].Path)
-			sub = fmt.Sprintf("Edited %d times across %d unique files touched", agg.TopEditedFiles[0].Count, agg.UniqueFiles)
+			sub = fmt.Sprintf("Edited %d times · %d files touched overall", agg.TopEditedFiles[0].Count, agg.UniqueFiles)
 		}
 		data["Figure"] = topFile
 		data["Sub"] = sub
@@ -1762,8 +1776,7 @@ func handleWrapped(w http.ResponseWriter, r *http.Request) {
 		data["LongestStreak"] = agg.LongestStreak
 		data["LinesAdded"] = format.FmtNum(int64(agg.LinesAdded))
 		data["Ships"] = agg.Ships
-		data["AgyHours"] = format.FmtHours(agy.ActiveMs)
-		data["ClaudeHours"] = format.FmtHours(cc.ActiveMs)
+		data["AgentSplit"] = strings.Join(split, ", ")
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

@@ -25,6 +25,7 @@ import (
 	"golang.org/x/image/math/fixed"
 	"golang.org/x/image/vector"
 
+	"github.com/chauveaul/vibe-rpc/internal/config"
 	"github.com/chauveaul/vibe-rpc/internal/format"
 	"github.com/chauveaul/vibe-rpc/internal/pricing"
 	"github.com/chauveaul/vibe-rpc/internal/scanner"
@@ -46,14 +47,28 @@ type Stat struct {
 
 // Data is everything the card shows, already formatted for display.
 type Data struct {
-	Hours       string // hero figure, e.g. "128h"
-	Subline     string // e.g. "412 sessions · 3.1k prompts"
-	Since       string // e.g. "SINCE MAR 2026"; empty hides it
-	AgyMs       int64
-	ClaudeMs    int64
-	Stats       []Stat // up to 6, laid out 2 per row
+	Hours       string       // hero figure, e.g. "128h"
+	Subline     string       // e.g. "412 sessions · 3.1k prompts"
+	Since       string       // e.g. "SINCE MAR 2026"; empty hides it
+	Agents      []AgentHours // hours split bar, one entry per agent
+	Stats       []Stat       // up to 6, laid out 2 per row
 	FooterLeft  string
 	FooterRight string
+}
+
+// AgentHours is one agent's share of the hours split bar.
+type AgentHours struct {
+	Name string
+	Ms   int64
+}
+
+// agentShades are the split-bar fills, in agent order; neighbours differ
+// enough in lightness to read as separate segments.
+var agentShades = []color.NRGBA{
+	rgba(0xf5, 0xf5, 0xf7, 0.95),
+	rgba(0x8c, 0x90, 0x99, 0.9),
+	rgba(0xc7, 0xca, 0xd1, 0.9),
+	rgba(0x5e, 0x62, 0x6b, 0.95),
 }
 
 // FromAggregate builds card Data from lifetime stats.
@@ -62,12 +77,11 @@ func FromAggregate(agg *scanner.Aggregate) Data {
 		agg = &scanner.Aggregate{}
 	}
 	toks := agg.InputTokens + agg.OutputTokens + agg.CacheReadTokens + agg.CacheWriteTokens
-	var agyMs, ccMs int64
-	if s := agg.BySource["antigravity"]; s != nil {
-		agyMs = s.ActiveMs
-	}
-	if s := agg.BySource["claude"]; s != nil {
-		ccMs = s.ActiveMs
+	var agents []AgentHours
+	var names []string
+	for _, a := range format.ActiveAgents(agg) {
+		agents = append(agents, AgentHours{Name: config.AgentName(a), Ms: agg.BySource[a].ActiveMs})
+		names = append(names, strings.ToUpper(config.AgentName(a)))
 	}
 	topModel := "—"
 	if len(agg.ModelSplit) > 0 {
@@ -82,11 +96,10 @@ func FromAggregate(agg *scanner.Aggregate) Data {
 		streak = "1 day"
 	}
 	return Data{
-		Hours:    format.FmtHours(agg.ActiveMs),
-		Subline:  fmt.Sprintf("%s sessions · %s prompts", format.FmtNum(int64(agg.Sessions)), format.FmtNum(int64(agg.UserMessages))),
-		Since:    since,
-		AgyMs:    agyMs,
-		ClaudeMs: ccMs,
+		Hours:   format.FmtHours(agg.ActiveMs),
+		Subline: fmt.Sprintf("%s sessions · %s prompts", format.FmtNum(int64(agg.Sessions)), format.FmtNum(int64(agg.UserMessages))),
+		Since:   since,
+		Agents:  agents,
 		Stats: []Stat{
 			{"Tokens", format.FmtNum(toks)},
 			{"API equiv", pricing.FmtCost(agg.EstimatedCost)},
@@ -96,7 +109,7 @@ func FromAggregate(agg *scanner.Aggregate) Data {
 			{"Top model", topModel},
 		},
 		FooterLeft:  "github.com/chauveaul/vibe-rpc",
-		FooterRight: "ANTIGRAVITY + CLAUDE CODE",
+		FooterRight: strings.Join(names, " + "),
 	}
 }
 
@@ -454,25 +467,38 @@ func (c *canvas) hero(d Data) {
 	sub := d.Subline
 	c.text(sub, x, base+50, c.face("Inter-Medium", 24), uni(colSoft), 0)
 
-	// Antigravity vs Claude Code split bar
+	// Per-agent hours split bar: one segment per agent, 3px gaps between.
 	barY, barW := base+92, 520.0
-	total := d.AgyMs + d.ClaudeMs
+	var total int64
+	for _, a := range d.Agents {
+		total += a.Ms
+	}
 	c.fill(path{rrect(x, barY, barW, 10, 5)}, uni(rgba(255, 255, 255, 0.08)))
 	if total > 0 {
-		aw := barW * float64(d.AgyMs) / float64(total)
-		if aw > 0 {
-			c.fill(path{rrect(x, barY, aw, 10, 5)}, uni(rgba(0xf5, 0xf5, 0xf7, 0.95)))
-		}
-		if cw := barW - aw; cw > 0 {
-			c.fill(path{rrect(x+aw+math.Min(aw, 3), barY, cw-math.Min(aw, 3), 10, 5)}, uni(rgba(0x8c, 0x90, 0x99, 0.9)))
+		cx := x
+		for i, a := range d.Agents {
+			w := barW * float64(a.Ms) / float64(total)
+			gap := 0.0
+			if cx > x && w > 0 {
+				gap = math.Min(w, 3)
+			}
+			if w-gap > 0 {
+				c.fill(path{rrect(cx+gap, barY, w-gap, 10, 5)}, uni(agentShades[i%len(agentShades)]))
+			}
+			cx += w
 		}
 	}
+	// Legend: wraps to a second line rather than running into the panel.
 	f := c.face("JetBrainsMono-Regular", 14)
-	ly := barY + 38
-	c.fill(path{circle(x+5, ly-5, 5)}, uni(colText))
-	lx := x + 18 + c.text("Antigravity "+format.FmtHours(d.AgyMs), x+18, ly, f, uni(colSoft), 0.2)
-	c.fill(path{circle(lx+28, ly-5, 5)}, uni(colMute))
-	c.text("Claude Code "+format.FmtHours(d.ClaudeMs), lx+41, ly, f, uni(colSoft), 0.2)
+	lx, ly := x, barY+38
+	for i, a := range d.Agents {
+		label := a.Name + " " + format.FmtHours(a.Ms)
+		if lx > x && lx+13+c.measure(label, f, 0.2) > x+barW+60 {
+			lx, ly = x, ly+26
+		}
+		c.fill(path{circle(lx+5, ly-5, 5)}, uni(agentShades[i%len(agentShades)]))
+		lx += 18 + c.text(label, lx+18, ly, f, uni(colSoft), 0.2) + 23
+	}
 }
 
 func (c *canvas) panel(d Data) {

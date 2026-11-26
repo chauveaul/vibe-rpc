@@ -39,7 +39,7 @@
           <div class="kicker anim d1">Your card, ready to share</div>
           <figure class="share anim d2">
             <img src="/api/card.png?scale=2" width="1200" height="630"
-                 alt="vibe-rpc Wrapped: {{.Hours}} active coding across {{.Sessions}} sessions, {{.Tokens}} tokens, {{.Cost}} API-equivalent, {{.LongestStreak}}-day best streak, +{{.LinesAdded}} lines, {{.Ships}} ships. Antigravity {{.AgyHours}}, Claude Code {{.ClaudeHours}}.">
+                 alt="vibe-rpc Wrapped: {{.Hours}} active coding across {{.Sessions}} sessions, {{.Tokens}} tokens, {{.Cost}} API-equivalent, {{.LongestStreak}}-day best streak, +{{.LinesAdded}} lines, {{.Ships}} ships.{{if .AgentSplit}} {{.AgentSplit}}.{{end}}">
           </figure>
           <div class="actions anim d3">
             <a class="btn primary" href="/api/card.png?scale=2&amp;download=1" download="vibe-rpc-wrapped.png">

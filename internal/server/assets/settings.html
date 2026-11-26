@@ -32,6 +32,7 @@
 
     {{if .Saved}}<div class="banner ok">Saved to {{.ConfigPath}} — daemon picks up changes automatically.</div>{{end}}
     {{if .Error}}<div class="banner err">{{.Error}}</div>{{end}}
+    {{if .Notice}}<div class="banner ok">{{.Notice}}</div>{{end}}
 
     <!-- Daemon -->
     <section class="set-card">
@@ -313,6 +314,130 @@
           <label class="check"><input type="checkbox" name="processDetection" {{if .Cfg.IsProcessDetection}}checked{{end}}> Detect running Antigravity / Claude processes</label>
         </div>
         <div class="save-actions">
+          <button type="submit" class="btn primary">Save changes</button>
+        </div>
+      </section>
+
+      <input type="hidden" name="automation_section" value="1">
+
+      <!-- Goals & Budget -->
+      <section class="set-card">
+        <div class="set-head">
+          <h2>Goals &amp; Budget</h2>
+          <span class="set-hint">Powers <code class="code-chip">&#123;goalLabel&#125;</code> and <code class="code-chip">&#123;budgetLabel&#125;</code> in your card</span>
+        </div>
+        <div class="grid3">
+          <label class="field">
+            Daily hours goal
+            <span class="unit"><input type="number" min="0" step="0.25" name="goalDailyHours" value="{{.GoalDailyHours}}" placeholder="Off"> h</span>
+          </label>
+          <label class="field">
+            Daily prompts goal
+            <span class="unit"><input type="number" min="0" step="1" name="goalDailyPrompts" value="{{.GoalDailyPrompts}}" placeholder="Off"> prompts</span>
+          </label>
+          <label class="field">
+            Weekly hours goal
+            <span class="unit"><input type="number" min="0" step="0.5" name="goalWeeklyHours" value="{{.GoalWeeklyHours}}" placeholder="Off"> h</span>
+          </label>
+        </div>
+        <div class="live-line">
+          <span class="live-k">Goal now</span>
+          <span class="live-v">{{if .GoalLabel}}{{.GoalLabel}}{{else}}No goal set{{end}}</span>
+        </div>
+        <p class="set-note">Only one goal shows at a time: daily hours wins, then daily prompts, then weekly hours. Leave a field blank to turn it off.</p>
+
+        <div class="sub-head">
+          <h3>Monthly spend</h3>
+          <span class="set-hint">Estimated API-equivalent cost across Antigravity &amp; Claude Code</span>
+        </div>
+        <div class="grid3">
+          <label class="field">
+            Monthly budget
+            <span class="unit">$ <input type="number" min="0" step="1" name="budgetMonthly" value="{{.BudgetMonthly}}" placeholder="Off"></span>
+          </label>
+          <label class="field">
+            Highlight meter at
+            <span class="unit"><input type="number" min="1" max="100" step="1" name="budgetWarnPct" value="{{.BudgetWarnPct}}"> %</span>
+          </label>
+        </div>
+        {{if .BudgetMonthly}}
+        <div class="meter {{.BudgetLevel}}" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{.BudgetBar}}" aria-label="Monthly budget used">
+          <div class="meter-fill" style="width: {{.BudgetBar}}%"></div>
+        </div>
+        <div class="live-line">
+          <span class="live-k">This month</span>
+          <span class="live-v">{{.BudgetMTD}} of ${{.BudgetMonthly}} · {{.BudgetPct}}%</span>
+        </div>
+        {{else}}
+        <div class="live-line">
+          <span class="live-k">This month</span>
+          <span class="live-v">{{.BudgetMTD}} so far · set a budget to track it</span>
+        </div>
+        {{end}}
+        <div class="save-actions">
+          <button type="submit" class="btn primary">Save changes</button>
+        </div>
+      </section>
+
+      <!-- Webhook -->
+      <section class="set-card">
+        <div class="set-head">
+          <h2>Webhook</h2>
+          <span class="set-hint">POST a JSON event when your status changes</span>
+        </div>
+        <label class="field">
+          Webhook URL
+          <input type="url" name="webhookUrl" value="{{.Cfg.Webhook.URL}}" placeholder="https://discord.com/api/webhooks/… or https://ntfy.sh/…">
+        </label>
+        <div class="sub-head">
+          <h3>Fire on</h3>
+          <span class="set-hint">Sent once when the status changes to one of these</span>
+        </div>
+        <div class="checks row tight">
+          {{range .WebhookEvents}}
+            <label class="check"><input type="checkbox" name="webhookOn" value="{{.Key}}" {{if .On}}checked{{end}}> {{.Label}}</label>
+          {{end}}
+        </div>
+        <details class="vars-details">
+          <summary>Payload format</summary>
+          <pre class="payload">{"event": "shipped", "source": "claude", "project": "vibe-rpc", "model": "claude-opus-4-6", "ts": 1764000000000}</pre>
+        </details>
+        <div class="save-actions">
+          <button type="submit" formaction="/settings/webhook/test" class="btn ghost">Save &amp; send test</button>
+          <button type="submit" class="btn primary">Save changes</button>
+        </div>
+      </section>
+
+      <!-- Triggers -->
+      <section class="set-card">
+        <div class="set-head">
+          <h2>Command Triggers</h2>
+          <span class="set-hint">Swap in a custom card when the agent runs a matching shell command</span>
+        </div>
+        <label class="field narrow">
+          Show trigger card for
+          <span class="unit"><input type="number" min="1" name="triggerFrameSec" value="{{.TriggerFrameSec}}"> sec</span>
+        </label>
+        {{if .Triggers}}
+        <div class="trigger-head" aria-hidden="true">
+          <span>Command regex</span><span>Top line</span><span>Bottom line</span><span>Hover text</span><span></span>
+        </div>
+        {{range .Triggers}}
+          <div class="trigger-row">
+            <input type="text" name="trigger_match_{{.Index}}" value="{{.Match}}" placeholder="^git push" aria-label="Command regex" class="mono">
+            <input type="text" name="trigger_details_{{.Index}}" value="{{.Details}}" placeholder="Deploying {project}" aria-label="Top line">
+            <input type="text" name="trigger_state_{{.Index}}" value="{{.State}}" placeholder="{gitBranch}" aria-label="Bottom line">
+            <input type="text" name="trigger_large_{{.Index}}" value="{{.LargeImageText}}" placeholder="Optional" aria-label="Hover text">
+            <button type="submit" formaction="/settings/triggers/delete" name="delete_trigger_idx" value="{{.Index}}" class="x" title="Remove trigger">×</button>
+          </div>
+        {{end}}
+        {{else}}
+        <p class="set-note">No triggers yet. Example: match <code class="code-chip">^(npm|go) test</code> to show "Running tests in &#123;project&#125;" for a few seconds.</p>
+        {{end}}
+        <input type="hidden" name="trigger_count" value="{{len .Triggers}}">
+        <p class="set-note">Patterns are case-insensitive regular expressions checked against the last Bash command. The first match wins. Card text accepts the same template variables as above.</p>
+        <div class="save-actions">
+          <button type="submit" formaction="/settings/triggers/add" class="btn ghost">+ Add trigger</button>
           <button type="submit" class="btn primary">Save changes</button>
         </div>
       </section>

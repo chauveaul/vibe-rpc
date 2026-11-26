@@ -20,6 +20,7 @@ import (
 	"github.com/chauveaul/vibe-rpc/internal/daemon"
 	"github.com/chauveaul/vibe-rpc/internal/doctor"
 	"github.com/chauveaul/vibe-rpc/internal/format"
+	"github.com/chauveaul/vibe-rpc/internal/notify"
 	"github.com/chauveaul/vibe-rpc/internal/paths"
 	"github.com/chauveaul/vibe-rpc/internal/presence"
 	"github.com/chauveaul/vibe-rpc/internal/pricing"
@@ -224,6 +225,9 @@ func NewHandler() http.Handler {
 	mux.HandleFunc("POST /settings/frames/delete", guard(handleSettingsFrameDelete))
 	mux.HandleFunc("POST /settings/buttons/add", guard(handleSettingsButtonAdd))
 	mux.HandleFunc("POST /settings/buttons/delete", guard(handleSettingsButtonDelete))
+	mux.HandleFunc("POST /settings/triggers/add", guard(handleSettingsTriggerAdd))
+	mux.HandleFunc("POST /settings/triggers/delete", guard(handleSettingsTriggerDelete))
+	mux.HandleFunc("POST /settings/webhook/test", guard(handleSettingsWebhookTest))
 	mux.HandleFunc("POST /settings/daemon", guard(handleSettingsDaemon))
 	mux.HandleFunc("POST /settings/privacy", guard(handleSettingsPrivacy))
 	mux.HandleFunc("GET /wrapped", guard(handleWrapped))
@@ -718,6 +722,50 @@ type frameEditView struct {
 	Requires string
 }
 
+type triggerEditView struct {
+	Index          int
+	Match          string
+	Details        string
+	State          string
+	LargeImageText string
+}
+
+type webhookEventView struct {
+	Key   string
+	Label string
+	On    bool
+}
+
+// webhookEvents are the status transitions a webhook can fire on.
+var webhookEvents = []struct{ Key, Label string }{
+	{"shipped", "Shipped"}, {"notification", "Waiting on input"}, {"working", "Working"},
+	{"thinking", "Thinking"}, {"compacting", "Compacting"}, {"idle", "Idle"},
+	{"stale", "Away"}, {"dual", "Dual wielding"}, {"trigger", "Trigger matched"},
+}
+
+// fmtNum renders a numeric setting for an input, leaving 0 (off) blank.
+func fmtNum(v float64) string {
+	if v == 0 {
+		return ""
+	}
+	return strconv.FormatFloat(v, 'f', -1, 64)
+}
+
+// monthToDateCost sums cost for the current calendar month.
+func monthToDateCost(agg *scanner.Aggregate) float64 {
+	if agg == nil {
+		return 0
+	}
+	pfx := scanner.DayKey(time.Now().UnixMilli())[:7]
+	var mtd float64
+	for k, d := range agg.ByDay {
+		if strings.HasPrefix(k, pfx) && d != nil {
+			mtd += d.Cost
+		}
+	}
+	return mtd
+}
+
 type btnEditView struct {
 	Index int
 	Label string
@@ -889,6 +937,38 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	trigs := make([]triggerEditView, 0, len(cfg.Triggers))
+	for i, t := range cfg.Triggers {
+		trigs = append(trigs, triggerEditView{Index: i, Match: t.Match, Details: t.Details, State: t.State, LargeImageText: t.LargeImageText})
+	}
+	whOn := map[string]bool{}
+	for _, e := range cfg.Webhook.On {
+		whOn[e] = true
+	}
+	whEvents := make([]webhookEventView, 0, len(webhookEvents))
+	for _, e := range webhookEvents {
+		whEvents = append(whEvents, webhookEventView{Key: e.Key, Label: e.Label, On: whOn[e.Key]})
+	}
+	warnPct := cfg.Budget.WarnAtPct
+	if warnPct <= 0 {
+		warnPct = 80
+	}
+	mtd := monthToDateCost(agg)
+	budgetPct := 0
+	if cfg.Budget.Monthly > 0 {
+		budgetPct = int(math.Round(mtd / cfg.Budget.Monthly * 100))
+	}
+	budgetBar := budgetPct
+	if budgetBar > 100 {
+		budgetBar = 100
+	}
+	budgetLevel := "ok"
+	if cfg.Budget.Monthly > 0 && budgetPct >= 100 {
+		budgetLevel = "over"
+	} else if cfg.Budget.Monthly > 0 && budgetPct >= warnPct {
+		budgetLevel = "warn"
+	}
+
 	varsJSONBytes, _ := json.Marshal(vars)
 	// Prevent accidental </script> breakout inside JSON data block
 	varsJSONSafe := strings.ReplaceAll(string(varsJSONBytes), "</", `<\/`)
@@ -923,6 +1003,20 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 		"Cfg":               cfg,
 		"RotationSec":       cfg.RotationIntervalMs / 1000,
 		"Workspaces":        discoverWorkspaces(cfg),
+		"Notice":            r.URL.Query().Get("notice"),
+		"GoalDailyHours":    fmtNum(cfg.Goals.DailyHours),
+		"GoalDailyPrompts":  fmtNum(float64(cfg.Goals.DailyPrompts)),
+		"GoalWeeklyHours":   fmtNum(cfg.Goals.WeeklyHours),
+		"GoalLabel":         fmt.Sprint(vars["goalLabel"]),
+		"BudgetMonthly":     fmtNum(cfg.Budget.Monthly),
+		"BudgetWarnPct":     warnPct,
+		"BudgetMTD":         pricing.FmtCost(mtd),
+		"BudgetPct":         budgetPct,
+		"BudgetBar":         budgetBar,
+		"BudgetLevel":       budgetLevel,
+		"WebhookEvents":     whEvents,
+		"Triggers":          trigs,
+		"TriggerFrameSec":   cfg.TriggerFrameSec,
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = settingsTpl.Execute(w, data)
@@ -1024,7 +1118,75 @@ func parseSettingsForm(r *http.Request, base config.Config) (config.Config, stri
 	edited.Notify.Enabled = r.FormValue("notifyEnabled") == "on"
 	edited.ProcessDetection = config.BoolPtr(r.FormValue("processDetection") == "on")
 
+	// Goals, budget, webhook & triggers. Gated on a sentinel so posts from
+	// forms that don't render this section never wipe these settings.
+	if r.FormValue("automation_section") == "1" {
+		parseAutomation(r, &edited)
+	}
+
 	return edited, selStatus
+}
+
+// formFloat parses a numeric field: blank means 0 (off), garbage keeps cur.
+func formFloat(r *http.Request, name string, cur float64) float64 {
+	v := strings.TrimSpace(r.FormValue(name))
+	if v == "" {
+		return 0
+	}
+	if f, err := strconv.ParseFloat(v, 64); err == nil {
+		return f
+	}
+	return cur
+}
+
+func parseAutomation(r *http.Request, edited *config.Config) {
+	edited.Goals.DailyHours = formFloat(r, "goalDailyHours", edited.Goals.DailyHours)
+	edited.Goals.DailyPrompts = int(math.Round(formFloat(r, "goalDailyPrompts", float64(edited.Goals.DailyPrompts))))
+	edited.Goals.WeeklyHours = formFloat(r, "goalWeeklyHours", edited.Goals.WeeklyHours)
+	edited.Budget.Monthly = formFloat(r, "budgetMonthly", edited.Budget.Monthly)
+	edited.Budget.WarnAtPct = int(math.Round(formFloat(r, "budgetWarnPct", float64(edited.Budget.WarnAtPct))))
+
+	edited.Webhook.URL = strings.TrimSpace(r.FormValue("webhookUrl"))
+	known := map[string]bool{}
+	for _, e := range webhookEvents {
+		known[e.Key] = true
+	}
+	var on []string
+	for _, e := range edited.Webhook.On { // keep hand-written events the UI doesn't list
+		if !known[e] {
+			on = append(on, e)
+		}
+	}
+	picked := map[string]bool{}
+	for _, e := range r.Form["webhookOn"] {
+		picked[e] = true
+	}
+	for _, e := range webhookEvents {
+		if picked[e.Key] {
+			on = append(on, e.Key)
+		}
+	}
+	edited.Webhook.On = on
+
+	if v, err := strconv.Atoi(strings.TrimSpace(r.FormValue("triggerFrameSec"))); err == nil && v >= 0 {
+		edited.TriggerFrameSec = v
+	}
+	if tc, err := strconv.Atoi(r.FormValue("trigger_count")); err == nil && tc >= 0 {
+		var trigs []config.TriggerConfig
+		for i := 0; i < tc; i++ {
+			t := config.TriggerConfig{
+				Match:          strings.TrimSpace(r.FormValue(fmt.Sprintf("trigger_match_%d", i))),
+				Details:        strings.TrimSpace(r.FormValue(fmt.Sprintf("trigger_details_%d", i))),
+				State:          strings.TrimSpace(r.FormValue(fmt.Sprintf("trigger_state_%d", i))),
+				LargeImageText: strings.TrimSpace(r.FormValue(fmt.Sprintf("trigger_large_%d", i))),
+			}
+			if t.Match == "" && t.Details == "" && t.State == "" && t.LargeImageText == "" {
+				continue // fully blank row = removed
+			}
+			trigs = append(trigs, t)
+		}
+		edited.Triggers = trigs
+	}
 }
 
 func redirectSettings(w http.ResponseWriter, r *http.Request, status string, saved bool, err error) {
@@ -1117,6 +1279,51 @@ func handleSettingsButtonDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	_, saveErr := config.SaveDiff(paths.ConfigPath(), base, edited)
 	redirectSettings(w, r, selStatus, saveErr == nil, saveErr)
+}
+
+func handleSettingsTriggerAdd(w http.ResponseWriter, r *http.Request) {
+	base := config.Load()
+	edited, selStatus := parseSettingsForm(r, base)
+	edited.Triggers = append(edited.Triggers, config.TriggerConfig{
+		Match: `^(npm|pnpm|yarn|go) test`, Details: "Running tests in {project}", State: "Fingers crossed",
+	})
+	_, err := config.SaveDiff(paths.ConfigPath(), base, edited)
+	redirectSettings(w, r, selStatus, err == nil, err)
+}
+
+func handleSettingsTriggerDelete(w http.ResponseWriter, r *http.Request) {
+	base := config.Load()
+	edited, selStatus := parseSettingsForm(r, base)
+	if idx, err := strconv.Atoi(r.FormValue("delete_trigger_idx")); err == nil && idx >= 0 && idx < len(edited.Triggers) {
+		edited.Triggers = append(edited.Triggers[:idx], edited.Triggers[idx+1:]...)
+	}
+	_, err := config.SaveDiff(paths.ConfigPath(), base, edited)
+	redirectSettings(w, r, selStatus, err == nil, err)
+}
+
+// handleSettingsWebhookTest saves the form, then sends a sample event to the
+// webhook URL synchronously so the result can be shown in the banner.
+func handleSettingsWebhookTest(w http.ResponseWriter, r *http.Request) {
+	base := config.Load()
+	edited, selStatus := parseSettingsForm(r, base)
+	if _, err := config.SaveDiff(paths.ConfigPath(), base, edited); err != nil {
+		redirectSettings(w, r, selStatus, false, err)
+		return
+	}
+	if edited.Webhook.URL == "" {
+		redirectSettings(w, r, selStatus, false, fmt.Errorf("Add a webhook URL first"))
+		return
+	}
+	code, err := notify.PostWebhookSync(edited.Webhook.URL, map[string]any{
+		"event": "test", "source": "vibe-rpc", "project": "vibe-rpc", "model": "", "test": true,
+		"ts": time.Now().UnixMilli(),
+	})
+	if err != nil {
+		redirectSettings(w, r, selStatus, false, fmt.Errorf("Test webhook failed: %v", err))
+		return
+	}
+	q := url.Values{"status": {selStatus}, "notice": {fmt.Sprintf("Test webhook delivered (HTTP %d)", code)}}
+	http.Redirect(w, r, "/settings?"+q.Encode(), http.StatusSeeOther)
 }
 
 func handleSettingsDaemon(w http.ResponseWriter, r *http.Request) {

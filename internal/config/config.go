@@ -438,6 +438,29 @@ func Validate(cfg Config) error {
 	if cfg.RotationIntervalMs < 0 || cfg.IdleThresholdSec < 0 || cfg.StaleSessionMin < 0 || cfg.ShippedFrameSec < 0 {
 		return errors.New("Timing values must be 0 or greater")
 	}
+	if cfg.Goals.DailyHours < 0 || cfg.Goals.DailyPrompts < 0 || cfg.Goals.WeeklyHours < 0 {
+		return errors.New("Goals must be 0 (off) or greater")
+	}
+	if cfg.Budget.Monthly < 0 {
+		return errors.New("Monthly budget must be 0 (off) or greater")
+	}
+	if cfg.Budget.WarnAtPct < 0 || cfg.Budget.WarnAtPct > 100 {
+		return errors.New("Budget warning must be between 0 and 100%")
+	}
+	if u := strings.ToLower(strings.TrimSpace(cfg.Webhook.URL)); u != "" && !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
+		return errors.New("Webhook URL must start with http:// or https://")
+	}
+	if cfg.TriggerFrameSec < 0 {
+		return errors.New("Trigger duration must be 0 or greater")
+	}
+	for i, t := range cfg.Triggers {
+		if strings.TrimSpace(t.Match) == "" {
+			return fmt.Errorf("Trigger %d needs a command pattern", i+1)
+		}
+		if _, err := regexp.Compile("(?i)" + t.Match); err != nil {
+			return fmt.Errorf("Trigger %d pattern %q isn't a valid regex: %v", i+1, t.Match, err)
+		}
+	}
 	return nil
 }
 

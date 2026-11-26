@@ -47,17 +47,26 @@ func PostWebhook(url string, payload any) {
 	if url == "" {
 		return
 	}
-	go func() {
-		b, err := json.Marshal(payload)
-		if err != nil {
-			return
-		}
-		client := &http.Client{Timeout: 4 * time.Second}
-		resp, err := client.Post(url, "application/json", bytes.NewReader(b))
-		if err == nil && resp != nil {
-			_ = resp.Body.Close()
-		}
-	}()
+	go func() { _, _ = PostWebhookSync(url, payload) }()
+}
+
+// PostWebhookSync POSTs payload as JSON and returns the HTTP status code.
+// Non-2xx responses are reported as errors.
+func PostWebhookSync(url string, payload any) (int, error) {
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return 0, err
+	}
+	client := &http.Client{Timeout: 4 * time.Second}
+	resp, err := client.Post(url, "application/json", bytes.NewReader(b))
+	if err != nil {
+		return 0, err
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return resp.StatusCode, fmt.Errorf("webhook returned HTTP %d", resp.StatusCode)
+	}
+	return resp.StatusCode, nil
 }
 
 func ShouldNotify(cfg config.NotifyConfig, prevStatus, newStatus string) bool {

@@ -241,8 +241,28 @@
   background: rgba(255, 255, 255, 0.10); padding: 2px 7px; border-radius: 6px;
 }
 
+/* Goals, budget, webhook & triggers */
+.set-note { margin: 12px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--text-mute); }
+.live-line { display: flex; align-items: baseline; gap: 12px; margin-top: 14px; font-size: 13px; }
+.live-k { font-family: var(--font-mono); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-faint); min-width: 84px; }
+.live-v { color: #fff; font-variant-numeric: tabular-nums; }
+.meter { margin-top: 16px; height: 8px; border-radius: var(--radius-pill); background: rgba(255, 255, 255, 0.08); border: 1px solid var(--border-soft); overflow: hidden; }
+.meter-fill { height: 100%; border-radius: inherit; background: rgba(255, 255, 255, 0.78); transition: width 0.3s; }
+.meter.warn .meter-fill { background: #fcd34d; }
+.meter.over .meter-fill { background: #f87171; }
+.checks.row.tight { margin-top: 4px; gap: 10px 22px; }
+.field.narrow { max-width: 220px; margin-bottom: 14px; }
+.payload { margin: 10px 0 0; padding: 10px 12px; border-radius: var(--radius-md); background: rgba(8, 9, 12, 0.56); border: 1px solid var(--border-soft); font-family: var(--font-mono); font-size: 11.5px; color: var(--text-soft); white-space: pre-wrap; word-break: break-all; }
+.trigger-head, .trigger-row { display: grid; grid-template-columns: 1.1fr 1.2fr 1fr 1fr auto; gap: 8px; align-items: center; }
+.trigger-head { margin-bottom: 6px; font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-faint); }
+.trigger-head span:last-child { width: 34px; }
+.trigger-row { margin-bottom: 8px; }
+.settings input.mono { font-family: var(--font-mono); font-size: 12.5px; }
+
 @media (max-width: 640px) {
   .grid2, .gif-pair { grid-template-columns: 1fr; }
-  .frame-row, .button-row { grid-template-columns: 1fr; }
+  .frame-row, .button-row, .trigger-row { grid-template-columns: 1fr; }
+  .trigger-head { display: none; }
+  .trigger-row { padding-bottom: 10px; border-bottom: 1px solid var(--border-soft); }
   .ws-row { flex-direction: column; align-items: stretch; gap: 8px; }
 }

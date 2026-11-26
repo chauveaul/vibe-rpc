@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/chauveaul/vibe-rpc/internal/config"
+	"github.com/chauveaul/vibe-rpc/internal/scanner"
 )
 
 func TestZeroJSHTMLPagesAndSettingsPost(t *testing.T) {
@@ -293,3 +294,86 @@ func TestSettingsAutomationSections(t *testing.T) {
 	}
 }
 
+func TestSettingsPreviewSwitcher(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("VIBE_RPC_CONFIG", filepath.Join(tmp, "config.json"))
+	t.Setenv("VIBE_RPC_STATE_DIR", filepath.Join(tmp, "state"))
+	t.Setenv("VIBE_RPC_DATA_DIR", filepath.Join(tmp, "data"))
+	h := NewHandler()
+
+	get := func(route string) string {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:47475"+route, nil)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s returned %d", route, rec.Code)
+		}
+		return rec.Body.String()
+	}
+	avatar := func(body string) string {
+		i := strings.Index(body, `<div class="avatar">`)
+		if i < 0 {
+			t.Fatal("no preview avatar")
+		}
+		return body[i : i+200]
+	}
+	appName := func(body string) string {
+		i := strings.Index(body, `<div class="pv-app">`)
+		j := strings.Index(body[i:], "</div>")
+		return body[i+len(`<div class="pv-app">`) : i+j]
+	}
+
+	cases := []struct {
+		route, gif, app string
+		becameDual      bool
+	}{
+		{"/settings?status=working&agent=antigravity", "agy-working.gif", "Antigravity", false},
+		{"/settings?status=working&agent=claude", "claude-working.gif", "Claude Code", false},
+		{"/settings?status=idle&agent=claude", "claude-idle.gif", "Claude Code", false},
+		{"/settings?status=working&agent=dual", "agy-dual.gif", "Antigravity &amp; Claude", true},
+		{"/settings?status=idle&agent=dual", "agy-idle.gif", "Antigravity &amp; Claude", false},
+		{"/settings?status=dual&agent=claude", "agy-dual.gif", "Antigravity &amp; Claude", false},
+	}
+	for _, c := range cases {
+		body := get(c.route)
+		if a := avatar(body); !strings.Contains(a, c.gif) {
+			t.Errorf("%s: expected %s in preview, got %q", c.route, c.gif, a)
+		}
+		if got := appName(body); got != c.app {
+			t.Errorf("%s: expected app %q, got %q", c.route, c.app, got)
+		}
+		if got := strings.Contains(body, `class="pv-note"`); got != c.becameDual {
+			t.Errorf("%s: dual note shown=%v, want %v", c.route, got, c.becameDual)
+		}
+	}
+
+	// Status tabs and forms carry the chosen agent; saving keeps it.
+	body := get("/settings?status=working&agent=claude")
+	if !strings.Contains(body, `href="/settings?status=idle&amp;agent=claude"`) {
+		t.Fatal("status tabs don't preserve the preview agent")
+	}
+	if strings.Contains(get("/settings?status=dual"), `class="seg sm"`) {
+		t.Fatal("dual tab should not show the agent switcher")
+	}
+	form := baseSettingsForm()
+	form.Set("agent", "claude")
+	loc := postSettings(t, h, "/settings/save", form).Header().Get("Location")
+	if !strings.Contains(loc, "agent=claude") {
+		t.Fatalf("save redirect dropped agent: %s", loc)
+	}
+	form.Set("agent", "bogus")
+	if loc := postSettings(t, h, "/settings/save", form).Header().Get("Location"); strings.Contains(loc, "agent=") {
+		t.Fatalf("invalid agent leaked into redirect: %s", loc)
+	}
+}
+
+func TestTopModelForSplitsByFamily(t *testing.T) {
+	agg := &scanner.Aggregate{ModelSplit: []scanner.ModelSplitEntry{{Model: "opus-5-5"}, {Model: "sonnet-5"}, {Model: "gemini-4-neon"}}}
+	if got := topModelFor(agg, "claude"); got != "opus-5-5" {
+		t.Fatalf("claude: got %q", got)
+	}
+	if got := topModelFor(agg, "antigravity"); got != "gemini-4-neon" {
+		t.Fatalf("antigravity: got %q", got)
+	}
+}

@@ -49,16 +49,19 @@
         <div class="btn-row">
           <form method="POST" action="/settings/daemon">
             <input type="hidden" name="status" value="{{.Status}}">
+            <input type="hidden" name="agent" value="{{.Agent}}">
             <input type="hidden" name="action" value="start">
             <button type="submit" class="btn">Start</button>
           </form>
           <form method="POST" action="/settings/daemon">
             <input type="hidden" name="status" value="{{.Status}}">
+            <input type="hidden" name="agent" value="{{.Agent}}">
             <input type="hidden" name="action" value="restart">
             <button type="submit" class="btn">Restart</button>
           </form>
           <form method="POST" action="/settings/daemon">
             <input type="hidden" name="status" value="{{.Status}}">
+            <input type="hidden" name="agent" value="{{.Agent}}">
             <input type="hidden" name="action" value="stop">
             <button type="submit" class="btn">Stop</button>
           </form>
@@ -73,6 +76,7 @@
     <!-- Main config form (Card + Discord + Behaviour) -->
     <form method="POST" action="/settings/save">
       <input type="hidden" name="status" value="{{.Status}}">
+            <input type="hidden" name="agent" value="{{.Agent}}">
 
       <!-- Card / Presence template editor -->
       <section class="set-card">
@@ -83,10 +87,25 @@
 
         <div class="seg" role="tablist">
           {{range .StatusTabs}}
-            <a href="/settings?status={{.Key}}" class="{{if .Active}}active{{end}}">{{.Label}}</a>
+            <a href="/settings?status={{.Key}}&amp;agent={{$.Agent}}" class="{{if .Active}}active{{end}}">{{.Label}}</a>
           {{end}}
         </div>
 
+        <div class="pv-bar">
+          <span class="pv-label" id="pv-as">Preview as</span>
+          {{if eq .Status "dual"}}
+            <span class="pv-fixed">Both agents working</span>
+          {{else}}
+            <nav class="seg sm" aria-labelledby="pv-as">
+              {{range .AgentTabs}}
+                <a href="/settings?status={{$.Status}}&amp;agent={{.Key}}" class="{{if .Active}}active{{end}}" {{if .Active}}aria-current="true"{{end}}>{{.Label}}</a>
+              {{end}}
+            </nav>
+          {{end}}
+        </div>
+        {{if .PreviewBecameDual}}
+          <p class="pv-note">When both agents are busy, Discord shows your <a href="/settings?status=dual&amp;agent=dual">Dual card</a> instead. Edits below apply to the single-agent "{{.Status}}" card.</p>
+        {{end}}
         <div class="preview">
           <div class="avatar">
             {{if .PreviewImage}}<img src="{{.PreviewImage}}" alt="Status art">{{end}}
@@ -458,18 +477,21 @@
           <div class="seg">
             <form method="POST" action="/settings/privacy">
               <input type="hidden" name="status" value="{{$.Status}}">
+              <input type="hidden" name="agent" value="{{$.Agent}}">
               <input type="hidden" name="cwd" value="{{.Path}}">
               <input type="hidden" name="visibility" value="public">
               <button type="submit" class="{{if eq .Visibility "public"}}active{{end}}">Public</button>
             </form>
             <form method="POST" action="/settings/privacy">
               <input type="hidden" name="status" value="{{$.Status}}">
+              <input type="hidden" name="agent" value="{{$.Agent}}">
               <input type="hidden" name="cwd" value="{{.Path}}">
               <input type="hidden" name="visibility" value="name-only">
               <button type="submit" class="{{if eq .Visibility "name-only"}}active{{end}}">Name only</button>
             </form>
             <form method="POST" action="/settings/privacy">
               <input type="hidden" name="status" value="{{$.Status}}">
+              <input type="hidden" name="agent" value="{{$.Agent}}">
               <input type="hidden" name="cwd" value="{{.Path}}">
               <input type="hidden" name="visibility" value="hidden">
               <button type="submit" class="{{if eq .Visibility "hidden"}}active{{end}}">Hidden</button>
@@ -516,18 +538,22 @@
     var detIn = document.querySelector('input[name="status_details"]');
     var stIn  = document.querySelector('input[name="status_state"]');
     var ltIn  = document.querySelector('input[name="status_large_text"]');
-    var imgIn = document.querySelector('input[name="status_image"]');
+    var imgName = {{.PreviewImageInput}};
+    var imgIn = imgName ? document.querySelector('input[name="' + imgName + '"]') : null;
+    var textLive = {{if .PreviewBecameDual}}false{{else}}true{{end}};
+    var appLive = {{if .PreviewAppLive}}true{{else}}false{{end}};
     var appIn = document.querySelector('input[name="appName"]');
     var pvDet = document.querySelector('.pv-details');
     var pvSt  = document.querySelector('.pv-state');
     var pvApp = document.querySelector('.pv-app');
     var pvImg = document.querySelector('.preview .avatar img');
-    var isDual = {{if eq .Status "dual"}}true{{else}}false{{end}};
     var sync = function() {
-      if (detIn && pvDet) pvDet.textContent = fill(detIn.value);
-      if (stIn  && pvSt)  pvSt.textContent  = fill(stIn.value);
-      if (ltIn  && pvImg) pvImg.title       = fill(ltIn.value);
-      if (appIn && pvApp && !isDual && appIn.value.trim()) pvApp.textContent = appIn.value.trim();
+      if (textLive) {
+        if (detIn && pvDet) pvDet.textContent = fill(detIn.value);
+        if (stIn  && pvSt)  pvSt.textContent  = fill(stIn.value);
+        if (ltIn  && pvImg) pvImg.title       = fill(ltIn.value);
+      }
+      if (appIn && pvApp && appLive && appIn.value.trim()) pvApp.textContent = appIn.value.trim();
       if (imgIn && pvImg && imgIn.value.trim()) {
         var u = imgIn.value.trim();
         if (u.indexOf('http://') === 0 || u.indexOf('https://') === 0 || u.indexOf('/assets/') === 0) pvImg.src = u;

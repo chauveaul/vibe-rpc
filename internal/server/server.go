@@ -724,6 +724,141 @@ type frameEditView struct {
 	Requires string
 }
 
+type agentTab struct {
+	Key    string
+	Label  string
+	Active bool
+}
+
+var previewAgents = []struct{ Key, Label string }{
+	{"antigravity", "Antigravity"}, {"claude", "Claude Code"}, {"dual", "Dual Wielding"},
+}
+
+func validAgent(a string) string {
+	for _, x := range previewAgents {
+		if x.Key == a {
+			return a
+		}
+	}
+	return ""
+}
+
+func agentTabs(sel string) []agentTab {
+	out := make([]agentTab, 0, len(previewAgents))
+	for _, a := range previewAgents {
+		out = append(out, agentTab{Key: a.Key, Label: a.Label, Active: a.Key == sel})
+	}
+	return out
+}
+
+// previewImageInput names the form field whose value the live-preview script
+// mirrors into the avatar, or "" when the shown GIF isn't edited on this tab.
+func previewImageInput(agent, selStatus, effStatus string) string {
+	switch {
+	case effStatus != selStatus:
+		return ""
+	case agent == "claude" && selStatus != "dual":
+		return "claude_status_image"
+	default:
+		return "status_image"
+	}
+}
+
+// isClaudeFamily reports whether a model id is an Anthropic model. Stats store
+// normalized ids ("opus-5-5"), so match on family names, not a "claude-" prefix.
+func isClaudeFamily(model string) bool {
+	m := strings.ToLower(model)
+	for _, fam := range []string{"claude", "opus", "sonnet", "haiku", "fable"} {
+		if strings.Contains(m, fam) {
+			return true
+		}
+	}
+	return false
+}
+
+// topModelFor returns the most-used model id for a source from lifetime stats.
+func topModelFor(agg *scanner.Aggregate, source string) string {
+	if agg != nil {
+		for _, m := range agg.ModelSplit {
+			if (source == "claude") == isClaudeFamily(m.Model) {
+				return m.Model
+			}
+		}
+	}
+	if source == "claude" {
+		return "claude-opus-4-6"
+	}
+	return "gemini-4-neon-high"
+}
+
+// buildPreviewState shapes a session the way the daemon would see it for the
+// chosen agent, and returns the status the daemon would actually display
+// (busy statuses become "dual" when both agents are working).
+func buildPreviewState(live state.SessionState, agg *scanner.Aggregate, status, agent string) (state.SessionState, string) {
+	st := live
+	st.Status = status
+	st.SourcesComputed = true
+	if st.Cwd == "" {
+		st.Cwd, _ = os.Getwd()
+	}
+	if st.CurrentTool == "" {
+		st.CurrentTool = "edit_file"
+		st.CurrentFile = "main.go"
+	}
+	modelFor := func(src string, snap *state.SessionSnapshot) string {
+		if snap != nil && snap.Model != "" {
+			return snap.Model
+		}
+		if live.Source == src && live.Model != "" {
+			return live.Model
+		}
+		return topModelFor(agg, src)
+	}
+	// Each agent's snapshot carries the previewed status, so non-busy statuses
+	// (idle, shipped, waiting) stay single cards just like in the daemon.
+	busy := status
+	if status == "dual" {
+		busy = "working"
+	}
+	switch agent {
+	case "claude":
+		st.Source, st.Model = "claude", modelFor("claude", live.ClaudeSession)
+		st.AntigravityActive, st.ClaudeActive = false, true
+		st.AgySession, st.ClaudeSession = nil, nil
+	case "dual":
+		st.Source, st.Model = "antigravity", modelFor("antigravity", live.AgySession)
+		st.AntigravityActive, st.ClaudeActive = true, true
+		agyFile, ccFile := "server.go", "app.go"
+		if live.AgySession != nil && live.AgySession.CurrentFile != "" {
+			agyFile = live.AgySession.CurrentFile
+		}
+		if live.ClaudeSession != nil && live.ClaudeSession.CurrentFile != "" {
+			ccFile = live.ClaudeSession.CurrentFile
+		}
+		st.AgySession = &state.SessionSnapshot{Cwd: st.Cwd, Model: st.Model, CurrentFile: agyFile, Status: busy}
+		st.ClaudeSession = &state.SessionSnapshot{Cwd: st.Cwd, Model: modelFor("claude", live.ClaudeSession), CurrentFile: ccFile, Status: busy}
+	default:
+		st.Source, st.Model = "antigravity", modelFor("antigravity", live.AgySession)
+		st.AntigravityActive, st.ClaudeActive = true, false
+		st.AgySession, st.ClaudeSession = nil, nil
+	}
+	if status == "dual" {
+		// The Dual tab always previews both agents working together.
+		st.AntigravityActive, st.ClaudeActive = true, true
+		if st.AgySession == nil {
+			st.AgySession = &state.SessionSnapshot{Cwd: st.Cwd, Model: modelFor("antigravity", live.AgySession), CurrentFile: "server.go", Status: "working"}
+		}
+		if st.ClaudeSession == nil {
+			st.ClaudeSession = &state.SessionSnapshot{Cwd: st.Cwd, Model: modelFor("claude", live.ClaudeSession), CurrentFile: "app.go", Status: "working"}
+		}
+		return st, "dual"
+	}
+	if presence.IsDualWorking(st) {
+		return st, "dual"
+	}
+	return st, status
+}
+
 type triggerEditView struct {
 	Index          int
 	Match          string
@@ -865,26 +1000,21 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 		tabs = append(tabs, statusTab{Key: k, Label: labels[k], Active: k == selStatus})
 	}
 
+	selAgent := validAgent(r.URL.Query().Get("agent"))
+	if selAgent == "" {
+		selAgent = "antigravity"
+		if liveSt.Source == "claude" {
+			selAgent = "claude"
+		}
+	}
 	stTpl := cfg.Presence.ByStatus[selStatus]
-	previewSt := liveSt
-	previewSt.Status = selStatus
-	if previewSt.Cwd == "" {
-		previewSt.Cwd, _ = os.Getwd()
+	previewSt, effStatus := buildPreviewState(liveSt, agg, selStatus, selAgent)
+	effTpl := cfg.Presence.ByStatus[effStatus]
+	previewSource := selAgent
+	if selAgent == "dual" {
+		previewSource = "antigravity"
 	}
-	if previewSt.CurrentTool == "" {
-		previewSt.CurrentTool = "edit_file"
-		previewSt.CurrentFile = "main.go"
-	}
-	previewApp := cfg.AppName
-	if selStatus == "dual" {
-		previewApp = "Antigravity & Claude"
-		if previewSt.AgySession == nil {
-			previewSt.AgySession = &state.SessionSnapshot{Cwd: previewSt.Cwd, Model: "gemini-4-neon-high", CurrentFile: "server.go", Status: "working"}
-		}
-		if previewSt.ClaudeSession == nil {
-			previewSt.ClaudeSession = &state.SessionSnapshot{Cwd: previewSt.Cwd, Model: "claude-opus-4-6", CurrentFile: "app.go", Status: "working"}
-		}
-	}
+	previewApp := presence.ResolveAppName(previewSt, cfg)
 	vars := format.BuildVars(previewSt, cfg, agg)
 
 	frames := make([]frameEditView, 0, len(stTpl.Rotation))
@@ -987,9 +1117,14 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 		"Status":            selStatus,
 		"StatusTabs":        tabs,
 		"PreviewAppName":    previewApp,
-		"PreviewImage":      presence.ResolveLargeImageKey(cfg, selStatus, previewSt.Model),
-		"PreviewDetails":    format.FillTemplate(stTpl.Details, vars),
-		"PreviewState":      format.FillTemplate(stTpl.State, vars),
+		"PreviewImage":      presence.ResolveLargeImageKeyForSource(cfg, previewSource, effStatus, previewSt.Model),
+		"PreviewDetails":    format.FillTemplate(effTpl.Details, vars),
+		"PreviewState":      format.FillTemplate(effTpl.State, vars),
+		"Agent":             selAgent,
+		"AgentTabs":         agentTabs(selAgent),
+		"PreviewBecameDual": effStatus == "dual" && selStatus != "dual",
+		"PreviewImageInput": previewImageInput(selAgent, selStatus, effStatus),
+		"PreviewAppLive":    !previewSt.ClaudeActive || !cfg.IsDynamicAppName(),
 		"PreviewVarsJSON":   template.JS(varsJSONSafe),
 		"StatusDetails":     stTpl.Details,
 		"StatusState":       stTpl.State,
@@ -1193,6 +1328,9 @@ func parseAutomation(r *http.Request, edited *config.Config) {
 
 func redirectSettings(w http.ResponseWriter, r *http.Request, status string, saved bool, err error) {
 	q := url.Values{"status": {status}}
+	if a := validAgent(r.FormValue("agent")); a != "" {
+		q.Set("agent", a)
+	}
 	if err != nil {
 		q.Set("err", err.Error())
 	} else if saved {
@@ -1325,6 +1463,9 @@ func handleSettingsWebhookTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := url.Values{"status": {selStatus}, "notice": {fmt.Sprintf("Test webhook delivered (HTTP %d)", code)}}
+	if a := validAgent(r.FormValue("agent")); a != "" {
+		q.Set("agent", a)
+	}
 	http.Redirect(w, r, "/settings?"+q.Encode(), http.StatusSeeOther)
 }
 

@@ -1,0 +1,799 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/spf13/cobra"
+
+	"github.com/meze/agy-rpc/internal/config"
+	"github.com/meze/agy-rpc/internal/daemon"
+	"github.com/meze/agy-rpc/internal/doctor"
+	"github.com/meze/agy-rpc/internal/format"
+	"github.com/meze/agy-rpc/internal/hook"
+	"github.com/meze/agy-rpc/internal/install"
+	"github.com/meze/agy-rpc/internal/mcp"
+	"github.com/meze/agy-rpc/internal/paths"
+	"github.com/meze/agy-rpc/internal/pause"
+	"github.com/meze/agy-rpc/internal/presence"
+	"github.com/meze/agy-rpc/internal/pricing"
+	"github.com/meze/agy-rpc/internal/privacy"
+	"github.com/meze/agy-rpc/internal/scanner"
+	"github.com/meze/agy-rpc/internal/server"
+	"github.com/meze/agy-rpc/internal/state"
+	"github.com/meze/agy-rpc/internal/stats"
+	"github.com/meze/agy-rpc/internal/tui"
+)
+
+func openBrowser(u string) {
+	go func() {
+		time.Sleep(250 * time.Millisecond)
+		var cmd *exec.Cmd
+		switch runtime.GOOS {
+		case "darwin":
+			cmd = exec.Command("open", u)
+		case "windows":
+			cmd = exec.Command("cmd", "/c", "start", u)
+		default:
+			cmd = exec.Command("xdg-open", u)
+		}
+		_ = cmd.Run()
+	}()
+}
+
+func loadAggOrScan() *scanner.Aggregate {
+	if agg := scanner.ReadAggregate(); agg != nil {
+		return agg
+	}
+	return scanner.Scan(scanner.ScanOptions{}).Aggregate
+}
+
+func resolveLiveState() (config.Config, *scanner.Aggregate, state.SessionState) {
+	cfg := config.Load()
+	agg := loadAggOrScan()
+	if agg == nil {
+		agg = &scanner.Aggregate{}
+	}
+	sessions := state.ListSessions(state.ListOptions{
+		IncludeAntigravity: cfg.Sources.WantAntigravity(),
+		IncludeClaude:      cfg.Sources.WantClaude(),
+		IncludeClaudeRPC:   true,
+	})
+	idleMs := int64(cfg.IdleThresholdSec) * 1000
+	if idleMs <= 0 {
+		idleMs = 60_000
+	}
+	now := time.Now().UnixMilli()
+	picked := presence.PickActiveSession(sessions, "", now, idleMs)
+	var st state.SessionState
+	if picked.State != nil {
+		st = *picked.State
+	} else {
+		st = state.Read("")
+	}
+	st.AntigravityActive, st.ClaudeActive = presence.ComputeActiveSources(sessions, nil, nil, nil, cfg, now)
+	st = format.ApplyIdle(st, cfg)
+	st = format.ApplyShipped(st, cfg)
+	st = format.ApplyTrigger(st, cfg)
+	return cfg, agg, st
+}
+
+func main() {
+	hook.EnsureDaemonFn = daemon.EnsureRunning
+
+	root := &cobra.Command{
+		Use:     "agy-rpc",
+		Short:   "Discord Rich Presence & coding analytics for Antigravity + Claude Code (100% Go)",
+		Version: paths.Version,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return tui.Run()
+		},
+	}
+
+	// setup / install
+	var noAutostart, noClaude bool
+	setupCmd := &cobra.Command{
+		Use:     "setup",
+		Aliases: []string{"install"},
+		Short:   "Wire Antigravity & Claude Code hooks, seed config, scan history, and start the daemon",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Println("Setting up agy-rpc (pure Go)...")
+			if created, err := install.SeedConfig(""); err != nil {
+				return err
+			} else if created {
+				fmt.Printf("  ✓ seeded %s\n", paths.ConfigPath())
+			} else {
+				fmt.Printf("  · config already exists at %s\n", paths.ConfigPath())
+			}
+
+			if changed, err := install.InstallAntigravityHooks("", ""); err != nil {
+				return err
+			} else if changed {
+				fmt.Printf("  ✓ wired Antigravity hooks in %s\n", paths.AgyHooksPath())
+			} else {
+				fmt.Printf("  · Antigravity hooks already up to date in %s\n", paths.AgyHooksPath())
+			}
+
+			if !noClaude {
+				if changed, err := install.InstallClaudeHooks("", ""); err != nil {
+					fmt.Printf("  ! skipped Claude Code hooks: %v\n", err)
+				} else if changed {
+					fmt.Printf("  ✓ wired Claude Code hooks in %s\n", paths.ClaudeSettingsPath())
+				} else {
+					fmt.Printf("  · Claude Code hooks already up to date in %s\n", paths.ClaudeSettingsPath())
+				}
+			}
+
+			if err := install.SelfTestHooks(); err != nil {
+				return err
+			}
+			fmt.Println("  ✓ hook self-test passed (Antigravity fail-closed allow + Claude continue)")
+
+			if !noAutostart {
+				if p, err := install.InstallAutostart(""); err != nil {
+					fmt.Printf("  ! autostart skipped: %v\n", err)
+				} else if p != "" {
+					fmt.Printf("  ✓ installed login autostart (%s)\n", p)
+				}
+			}
+
+			res := scanner.Scan(scanner.ScanOptions{})
+			fmt.Printf("  ✓ scanned %d transcript(s) (%d new, %d cached)\n", res.Total, res.Scanned, res.Skipped)
+
+			daemon.ClearStopped()
+			daemon.StopAndWait()
+			pid, err := daemon.SpawnDetached()
+			if err != nil {
+				return err
+			}
+			fmt.Printf("  ✓ started daemon (pid %d)\n", pid)
+			fmt.Printf("\nOpen settings: agy-rpc settings\nOpen dashboard: agy-rpc serve\n")
+			return nil
+		},
+	}
+	setupCmd.Flags().BoolVar(&noAutostart, "no-autostart", false, "Skip installing OS login autostart")
+	setupCmd.Flags().BoolVar(&noClaude, "no-claude", false, "Skip wiring Claude Code hooks")
+
+	// uninstall
+	uninstallCmd := &cobra.Command{
+		Use:   "uninstall",
+		Short: "Stop daemon and remove Antigravity/Claude hooks, MCP entry, and autostart",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			daemon.MarkStopped()
+			daemon.StopAndWait()
+			fmt.Println("  ✓ stopped daemon")
+			if ok, _ := install.UninstallAntigravityHooks(""); ok {
+				fmt.Printf("  ✓ removed Antigravity hooks from %s\n", paths.AgyHooksPath())
+			}
+			if ok, _ := install.UninstallClaudeHooks(""); ok {
+				fmt.Printf("  ✓ removed Claude Code hooks from %s\n", paths.ClaudeSettingsPath())
+			}
+			if ok, _ := mcp.UninstallConfig(""); ok {
+				fmt.Printf("  ✓ removed MCP entry from %s\n", paths.AgyMcpConfigPath())
+			}
+			_ = install.UninstallAutostart()
+			fmt.Println("  ✓ removed autostart")
+			return nil
+		},
+	}
+
+	// Web surfaces: serve, settings, wrapped
+	var noOpen bool
+	var portFlag int
+	servePage := func(route string) func(*cobra.Command, []string) error {
+		return func(cmd *cobra.Command, args []string) error {
+			p := server.Port()
+			if portFlag > 0 {
+				p = portFlag
+			}
+			addr := fmt.Sprintf("127.0.0.1:%d", p)
+			u := fmt.Sprintf("http://%s%s", addr, route)
+			fmt.Printf("Serving agy-rpc at %s (Ctrl+C to stop)\n", u)
+			if !noOpen {
+				openBrowser(u)
+			}
+			return server.Serve(addr)
+		}
+	}
+	serveCmd := &cobra.Command{Use: "serve", Short: "Open the local zero-JS web dashboard", RunE: servePage("/")}
+	serveCmd.Flags().BoolVar(&noOpen, "no-open", false, "Do not automatically open the browser")
+	serveCmd.Flags().IntVar(&portFlag, "port", 0, "Port to bind on 127.0.0.1 (default 47475)")
+
+	settingsCmd := &cobra.Command{Use: "settings", Short: "Open the visual settings editor in your browser", RunE: servePage("/settings")}
+	settingsCmd.Flags().BoolVar(&noOpen, "no-open", false, "Do not automatically open the browser")
+	settingsCmd.Flags().IntVar(&portFlag, "port", 0, "Port to bind on 127.0.0.1 (default 47475)")
+
+	wrappedCmd := &cobra.Command{Use: "wrapped", Short: "Open your Coding Wrapped story in your browser", RunE: servePage("/wrapped")}
+	wrappedCmd.Flags().BoolVar(&noOpen, "no-open", false, "Do not automatically open the browser")
+	wrappedCmd.Flags().IntVar(&portFlag, "port", 0, "Port to bind on 127.0.0.1 (default 47475)")
+
+	// daemon & lifecycle
+	daemonCmd := &cobra.Command{
+		Use:    "daemon",
+		Short:  "Run the Discord Rich Presence daemon in the foreground",
+		Hidden: true,
+		RunE:   func(cmd *cobra.Command, args []string) error { return daemon.Run() },
+	}
+	startCmd := &cobra.Command{
+		Use:   "start",
+		Short: "Start the background Discord Rich Presence daemon",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			daemon.ClearStopped()
+			if pid := daemon.AlivePID(); pid > 0 {
+				fmt.Printf("agy-rpc daemon already running (pid %d)\n", pid)
+				return nil
+			}
+			pid, err := daemon.SpawnDetached()
+			if err != nil {
+				return err
+			}
+			fmt.Printf("agy-rpc daemon started (pid %d)\n", pid)
+			return nil
+		},
+	}
+	stopCmd := &cobra.Command{
+		Use:   "stop",
+		Short: "Stop the background daemon",
+		Run: func(cmd *cobra.Command, args []string) {
+			daemon.MarkStopped()
+			daemon.StopAndWait()
+			fmt.Println("agy-rpc daemon stopped")
+		},
+	}
+	restartCmd := &cobra.Command{
+		Use:   "restart",
+		Short: "Restart the background daemon",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			daemon.ClearStopped()
+			daemon.StopAndWait()
+			pid, err := daemon.SpawnDetached()
+			if err != nil {
+				return err
+			}
+			fmt.Printf("agy-rpc daemon restarted (pid %d)\n", pid)
+			return nil
+		},
+	}
+
+	// hook
+	var sourceFlag string
+	hookCmd := &cobra.Command{
+		Use:    "hook <event>",
+		Short:  "Internal hook entrypoint invoked by Antigravity or Claude Code",
+		Hidden: true,
+		Args:   cobra.MaximumNArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			ev := "unknown"
+			if len(args) > 0 {
+				ev = args[0]
+			}
+			hook.RunCLI(ev, sourceFlag, os.Stdin, os.Stdout)
+		},
+	}
+	hookCmd.Flags().StringVar(&sourceFlag, "source", "", "Explicit source: antigravity or claude")
+
+	// status / dump
+	var dumpFlag bool
+	statusCmd := &cobra.Command{
+		Use:     "status",
+		Aliases: []string{"dump"},
+		Short:   "Show current daemon status, active session, and Discord card preview",
+		Run: func(cmd *cobra.Command, args []string) {
+			cfg, agg, st := resolveLiveState()
+			vars := format.BuildVars(st, cfg, agg)
+			act, cleared := daemon.BuildActivity(st, cfg, agg, &presence.RotationCursor{})
+			if dumpFlag || cmd.CalledAs() == "dump" {
+				b, _ := json.MarshalIndent(map[string]any{
+					"pid":      daemon.AlivePID(),
+					"state":    st,
+					"activity": act,
+					"cleared":  cleared,
+					"vars":     vars,
+				}, "", "  ")
+				fmt.Println(string(b))
+				return
+			}
+			pid := daemon.AlivePID()
+			if pid > 0 {
+				fmt.Printf("Daemon   : running (pid %d)\n", pid)
+			} else {
+				fmt.Println("Daemon   : stopped")
+			}
+			if u := pause.Until(""); !u.IsZero() {
+				fmt.Printf("Paused   : until %s\n", u.Format(time.Kitchen))
+			}
+			fmt.Printf("Agent    : %v (%s)\n", vars["sourcePretty"], st.Status)
+			fmt.Printf("Project  : %v\n", vars["project"])
+			fmt.Printf("Model    : %v\n", vars["modelPretty"])
+			if cleared || act == nil {
+				fmt.Println("Discord  : (hidden / paused)")
+			} else {
+				fmt.Printf("Discord  : [%s] %s | %s\n", act.Name, act.Details, act.State)
+			}
+		},
+	}
+	statusCmd.Flags().BoolVar(&dumpFlag, "dump", false, "Dump raw state, variables, and activity as JSON")
+
+	// today
+	todayCmd := &cobra.Command{
+		Use:   "today",
+		Short: "Print today's combined coding stats",
+		Run: func(cmd *cobra.Command, args []string) {
+			agg := loadAggOrScan()
+			dk := scanner.DayKey(time.Now().UnixMilli())
+			d := &scanner.DayBucket{}
+			if agg != nil && agg.ByDay != nil && agg.ByDay[dk] != nil {
+				d = agg.ByDay[dk]
+			}
+			tok := d.InputTokens + d.OutputTokens + d.CacheReadTokens + d.CacheWriteTokens
+			fmt.Printf("Today (%s)\n", dk)
+			fmt.Printf("  Active time : %s (%d sessions)\n", format.FmtHours(d.ActiveMs), d.Sessions)
+			fmt.Printf("  Prompts     : %d  ·  Tool calls: %d\n", d.UserMessages, d.ToolCalls)
+			fmt.Printf("  Tokens      : %s  ·  API equiv: %s\n", format.FmtNum(tok), pricing.FmtCost(d.Cost))
+			fmt.Printf("  Code churn  : +%d / -%d lines  ·  Ships: %d\n", d.LinesAdded, d.LinesRemoved, d.Ships)
+		},
+	}
+
+	// week
+	var compareFlag bool
+	weekCmd := &cobra.Command{
+		Use:   "week",
+		Short: "Print a 7-day activity breakdown",
+		Run: func(cmd *cobra.Command, args []string) {
+			agg := loadAggOrScan()
+			rows := stats.WeekGrid(agg, 7)
+			var totalMs int64
+			for _, r := range rows {
+				totalMs += r.ActiveMs
+				mark := " "
+				if r.IsToday {
+					mark = "→"
+				}
+				fmt.Printf("%s %s %s  %-6s  %3d prompts  %8s tokens  %s\n",
+					mark, r.Weekday, r.Day, format.FmtHours(r.ActiveMs), r.Prompts, format.FmtNum(r.Tokens), pricing.FmtCost(r.Cost))
+			}
+			fmt.Printf("\nTotal: %s\n", format.FmtHours(totalMs))
+			if compareFlag {
+				sum := stats.SummarizeRange(agg, "7d")
+				fmt.Printf("Previous 7d: %s\n", format.FmtHours(sum.PrevActiveMs))
+			}
+		},
+	}
+	weekCmd.Flags().BoolVar(&compareFlag, "compare", false, "Compare against the previous 7 days")
+
+	// projects
+	var projLimit int
+	projectsCmd := &cobra.Command{
+		Use:   "projects [name]",
+		Short: "List projects ranked by active time or inspect a single project",
+		Run: func(cmd *cobra.Command, args []string) {
+			agg := loadAggOrScan()
+			if agg == nil || len(agg.Projects) == 0 {
+				fmt.Println("No projects recorded yet. Run `agy-rpc scan`.")
+				return
+			}
+			if len(args) > 0 {
+				ps := agg.Projects[args[0]]
+				if ps == nil {
+					fmt.Printf("Project %q not found.\n", args[0])
+					return
+				}
+				fmt.Printf("%s\n  Active: %s · Sessions: %d · Prompts: %d · Tools: %d · Cost: %s · Lines: +%d/-%d\n",
+					args[0], format.FmtHours(ps.ActiveMs), ps.Sessions, ps.UserMessages, ps.ToolCalls,
+					pricing.FmtCost(ps.Cost), ps.LinesAdded, ps.LinesRemoved)
+				return
+			}
+			type kv struct {
+				name string
+				ps   *scanner.ProjectStats
+			}
+			var list []kv
+			for n, ps := range agg.Projects {
+				list = append(list, kv{n, ps})
+			}
+			sort.Slice(list, func(i, j int) bool { return list[i].ps.ActiveMs > list[j].ps.ActiveMs })
+			if projLimit > 0 && len(list) > projLimit {
+				list = list[:projLimit]
+			}
+			for _, p := range list {
+				fmt.Printf("%-24s %6s  %3d sessions  %8s\n", p.name, format.FmtHours(p.ps.ActiveMs), p.ps.Sessions, pricing.FmtCost(p.ps.Cost))
+			}
+		},
+	}
+	projectsCmd.Flags().IntVar(&projLimit, "limit", 15, "Maximum projects to show")
+
+	// recap
+	var recapMD, recapJSON bool
+	recapCmd := &cobra.Command{
+		Use:   "recap [today|yesterday|week|Nd]",
+		Short: "Generate a standup-ready coding recap",
+		Run: func(cmd *cobra.Command, args []string) {
+			rng := "yesterday"
+			if len(args) > 0 {
+				rng = args[0]
+			}
+			rec := stats.BuildRecap(loadAggOrScan(), rng)
+			if recapJSON {
+				b, _ := json.MarshalIndent(rec, "", "  ")
+				fmt.Println(string(b))
+				return
+			}
+			fmt.Print(stats.RenderRecapMarkdown(rec))
+		},
+	}
+	recapCmd.Flags().BoolVar(&recapMD, "md", true, "Output Markdown")
+	recapCmd.Flags().BoolVar(&recapJSON, "json", false, "Output JSON")
+
+	// insights
+	insightsCmd := &cobra.Command{
+		Use:   "insights",
+		Short: "Print data-driven insights about your coding habits",
+		Run: func(cmd *cobra.Command, args []string) {
+			for _, line := range stats.GenerateInsights(loadAggOrScan()) {
+				fmt.Printf("→ %s\n", line)
+			}
+		},
+	}
+
+	// export
+	var exportCSV bool
+	var exportOut string
+	exportCmd := &cobra.Command{
+		Use:   "export",
+		Short: "Export combined coding stats as JSON or CSV",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			agg := loadAggOrScan()
+			var data []byte
+			if exportCSV {
+				data = []byte(stats.AggregateToCSV(agg))
+			} else {
+				data, _ = json.MarshalIndent(agg, "", "  ")
+				data = append(data, '\n')
+			}
+			if exportOut != "" {
+				return os.WriteFile(exportOut, data, 0o644)
+			}
+			fmt.Print(string(data))
+			return nil
+		},
+	}
+	exportCmd.Flags().BoolVar(&exportCSV, "csv", false, "Export daily CSV instead of JSON")
+	exportCmd.Flags().StringVar(&exportOut, "out", "", "Write output to file path")
+
+	// statcards (badge, card, calendar, session-card)
+	var cardMetric, cardOut string
+	statcardsCmd := &cobra.Command{
+		Use:     "statcards [badge|card|calendar|session-card]",
+		Aliases: []string{"badge", "card", "calendar", "session-card"},
+		Short:   "Render shareable SVG badges, poster cards, and heatmaps",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			kind := cmd.CalledAs()
+			if kind == "statcards" {
+				kind = "card"
+				if len(args) > 0 {
+					kind = args[0]
+				}
+			}
+			agg := loadAggOrScan()
+			var svg string
+			switch kind {
+			case "badge":
+				svg = stats.BadgeSVG(agg, cardMetric)
+			case "calendar", "heatmap":
+				svg = stats.HeatmapSVG(agg, 91)
+			case "session-card":
+				_, _, st := resolveLiveState()
+				svg = stats.SessionCardSVG(st)
+			default:
+				svg = stats.PosterCardSVG(agg)
+			}
+			if cardOut != "" {
+				return os.WriteFile(cardOut, []byte(svg), 0o644)
+			}
+			fmt.Println(svg)
+			return nil
+		},
+	}
+	statcardsCmd.Flags().StringVar(&cardMetric, "metric", "hours", "Badge metric: hours|tokens|streak|cost|sessions|lines")
+	statcardsCmd.Flags().StringVar(&cardOut, "out", "", "Write SVG to file path")
+
+	// statusline
+	var slTpl string
+	statuslineCmd := &cobra.Command{
+		Use:   "statusline",
+		Short: "Print a single-line status string for tmux / shell prompts / status bars",
+		Run: func(cmd *cobra.Command, args []string) {
+			cfg, agg, st := resolveLiveState()
+			vars := format.BuildVars(st, cfg, agg)
+			if slTpl == "" {
+				slTpl = "{sourcePretty} · {project} · {modelPretty} · {todayHours} today"
+			}
+			fmt.Println(format.FillTemplate(slTpl, vars))
+		},
+	}
+	statuslineCmd.Flags().StringVar(&slTpl, "template", "", "Template string using {var} placeholders")
+
+	// mcp
+	mcpCmd := &cobra.Command{
+		Use:   "mcp [install|uninstall]",
+		Short: "Run the stdio MCP server or register it in ~/.gemini/config/mcp_config.json",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				switch args[0] {
+				case "install":
+					if err := mcp.InstallConfig("", ""); err != nil {
+						return err
+					}
+					fmt.Printf("Registered agy-rpc MCP server in %s\n", paths.AgyMcpConfigPath())
+					return nil
+				case "uninstall":
+					ok, err := mcp.UninstallConfig("")
+					if err != nil {
+						return err
+					}
+					if ok {
+						fmt.Printf("Removed agy-rpc MCP server from %s\n", paths.AgyMcpConfigPath())
+					} else {
+						fmt.Println("agy-rpc MCP server was not registered.")
+					}
+					return nil
+				}
+			}
+			return mcp.ServeStdio(os.Stdin, os.Stdout)
+		},
+	}
+
+	// private / public / privacy
+	privateCmd := &cobra.Command{
+		Use:     "private [on|off|name-only|status]",
+		Aliases: []string{"public", "privacy"},
+		Short:   "Manage Discord visibility for the current working directory",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cwd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			action := "status"
+			if cmd.CalledAs() == "public" {
+				action = "off"
+			} else if len(args) > 0 {
+				action = strings.ToLower(args[0])
+			}
+			switch action {
+			case "on", "hidden":
+				if err := privacy.AddPrivateCwd(cwd); err != nil {
+					return err
+				}
+				fmt.Printf("%s -> hidden\n", cwd)
+			case "off", "public":
+				if err := privacy.RemovePrivateCwd(cwd); err != nil {
+					return err
+				}
+				fmt.Printf("%s -> public\n", cwd)
+			case "name-only":
+				if _, err := privacy.SetCwdVisibility(cwd, "name-only"); err != nil {
+					return err
+				}
+				fmt.Printf("%s -> name-only\n", cwd)
+			default:
+				res := privacy.Resolve(cwd, config.Load())
+				fmt.Printf("%s -> %s (%s)\n", cwd, res.Visibility, res.Reason)
+			}
+			return nil
+		},
+	}
+
+	// pause / resume
+	pauseCmd := &cobra.Command{
+		Use:     "pause [duration|off|status]",
+		Aliases: []string{"resume", "unpause"},
+		Short:   "Temporarily pause Discord Rich Presence (e.g. 30m, 2h, off)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.CalledAs() == "resume" || cmd.CalledAs() == "unpause" {
+				pause.Clear("")
+				fmt.Println("Discord presence resumed.")
+				return nil
+			}
+			arg := ""
+			if len(args) > 0 {
+				arg = strings.ToLower(args[0])
+			}
+			switch arg {
+			case "off", "clear", "resume":
+				pause.Clear("")
+				fmt.Println("Discord presence resumed.")
+			case "status":
+				if u := pause.Until(""); u.IsZero() {
+					fmt.Println("Not paused.")
+				} else {
+					fmt.Printf("Paused until %s (%s remaining)\n", u.Format(time.Kitchen), time.Until(u).Round(time.Second))
+				}
+			default:
+				dur, ok := pause.ParseDuration(arg)
+				if !ok {
+					return fmt.Errorf("invalid duration %q (use e.g. 30m, 2h, 1h30m)", arg)
+				}
+				until, err := pause.Set(dur, "")
+				if err != nil {
+					return err
+				}
+				fmt.Printf("Discord presence paused until %s\n", until.Format(time.Kitchen))
+			}
+			return nil
+		},
+	}
+
+	// logs / tail
+	var logLines int
+	logsCmd := &cobra.Command{
+		Use:     "logs",
+		Aliases: []string{"tail", "log"},
+		Short:   "Show recent daemon log entries",
+		Run: func(cmd *cobra.Command, args []string) {
+			b, err := os.ReadFile(paths.LogPath())
+			if err != nil {
+				fmt.Printf("No log yet at %s\n", paths.LogPath())
+				return
+			}
+			lines := strings.Split(strings.TrimRight(string(b), "\n"), "\n")
+			if logLines > 0 && len(lines) > logLines {
+				lines = lines[len(lines)-logLines:]
+			}
+			fmt.Println(strings.Join(lines, "\n"))
+		},
+	}
+	logsCmd.Flags().IntVarP(&logLines, "lines", "n", 40, "Number of recent lines to display")
+
+	// doctor
+	var fixFlag bool
+	doctorCmd := &cobra.Command{
+		Use:   "doctor",
+		Short: "Diagnose hooks, config, daemon, Discord IPC, and transcript caches",
+		Run: func(cmd *cobra.Command, args []string) {
+			if fixFlag {
+				actions := doctor.Fix()
+				if len(actions) == 0 {
+					fmt.Println("Nothing to fix.")
+				} else {
+					for _, a := range actions {
+						fmt.Printf("  ✓ %s\n", a)
+					}
+				}
+				fmt.Println()
+			}
+			for _, c := range doctor.Run() {
+				sym := "✓"
+				switch c.Status {
+				case doctor.Warn:
+					sym = "!"
+				case doctor.Fail:
+					sym = "✗"
+				case doctor.Info:
+					sym = "·"
+				}
+				fmt.Printf("  %s %-18s %s\n", sym, c.Name, c.Detail)
+				if c.Fix != "" {
+					fmt.Printf("      fix: %s\n", c.Fix)
+				}
+			}
+		},
+	}
+	doctorCmd.Flags().BoolVar(&fixFlag, "fix", false, "Attempt to repair hooks, config, cache, and daemon")
+
+	// scan / rescan
+	var forceScan bool
+	scanCmd := &cobra.Command{
+		Use:     "scan",
+		Aliases: []string{"rescan"},
+		Short:   "Scan Antigravity and Claude Code transcripts into the aggregate cache",
+		Run: func(cmd *cobra.Command, args []string) {
+			res := scanner.Scan(scanner.ScanOptions{Force: forceScan || cmd.CalledAs() == "rescan"})
+			fmt.Printf("Scanned %d files (%d parsed, %d cached, %d pruned). Total sessions: %d\n",
+				res.Total, res.Scanned, res.Skipped, res.Removed, res.Aggregate.Sessions)
+		},
+	}
+	scanCmd.Flags().BoolVar(&forceScan, "force", false, "Re-parse all transcripts ignoring cache")
+
+	// backfill
+	backfillCmd := &cobra.Command{
+		Use:   "backfill <dir>",
+		Short: "Scan an additional archive directory of JSONL transcripts",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			abs, err := filepath.Abs(args[0])
+			if err != nil {
+				return err
+			}
+			res := scanner.Scan(scanner.ScanOptions{ExtraDirs: []string{abs}})
+			fmt.Printf("Backfilled from %s: %d parsed, %d total sessions\n", abs, res.Scanned, res.Aggregate.Sessions)
+			return nil
+		},
+	}
+
+	// preview & vars
+	previewCmd := &cobra.Command{
+		Use:   "preview",
+		Short: "Preview how every status card renders with your current config and stats",
+		Run: func(cmd *cobra.Command, args []string) {
+			cfg, agg, st := resolveLiveState()
+			if st.Cwd == "" {
+				st.Cwd, _ = os.Getwd()
+			}
+			if st.CurrentTool == "" {
+				st.CurrentTool = "edit_file"
+				st.CurrentFile = "main.go"
+			}
+			for _, s := range config.Statuses {
+				cp := st
+				cp.Status = s
+				act, _ := daemon.BuildActivity(cp, cfg, agg, &presence.RotationCursor{})
+				if act != nil {
+					fmt.Printf("[%-12s] %s | %s | %s\n", s, act.Name, act.Details, act.State)
+				}
+			}
+		},
+	}
+	varsCmd := &cobra.Command{
+		Use:   "vars",
+		Short: "List all template variables and their live values",
+		Run: func(cmd *cobra.Command, args []string) {
+			cfg, agg, st := resolveLiveState()
+			vars := format.BuildVars(st, cfg, agg)
+			keys := make([]string, 0, len(vars))
+			for k := range vars {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			for _, k := range keys {
+				fmt.Printf("{%-24s} = %v\n", k, vars[k])
+			}
+		},
+	}
+
+	// assets export (Antigravity Discord GIFs)
+	assetsCmd := &cobra.Command{
+		Use:   "assets",
+		Short: "Export built-in animated Antigravity GIFs for Discord Rich Presence",
+	}
+	assetsExportCmd := &cobra.Command{
+		Use:   "export [dir]",
+		Short: "Write all 7 animated Antigravity GIFs to a folder (default ./agy-discord-gifs)",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dir := "agy-discord-gifs"
+			if len(args) > 0 {
+				dir = args[0]
+			}
+			written, err := server.ExportGifs(dir)
+			if err != nil {
+				return err
+			}
+			for _, p := range written {
+				fmt.Printf("  ✓ %s\n", p)
+			}
+			fmt.Printf("\nUpload these to Discord Developer Portal -> Rich Presence -> Art Assets (keep names like agy-working), or host them over HTTPS and set 'Public GIF Base URL' in `agy-rpc settings`.\n")
+			return nil
+		},
+	}
+	assetsCmd.AddCommand(assetsExportCmd)
+
+	root.AddCommand(
+		setupCmd, uninstallCmd, serveCmd, settingsCmd, wrappedCmd,
+		daemonCmd, startCmd, stopCmd, restartCmd, hookCmd,
+		statusCmd, todayCmd, weekCmd, projectsCmd, recapCmd,
+		insightsCmd, exportCmd, statcardsCmd, statuslineCmd, mcpCmd,
+		privateCmd, pauseCmd, logsCmd, doctorCmd, scanCmd, backfillCmd,
+		previewCmd, varsCmd, assetsCmd,
+	)
+
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
+}

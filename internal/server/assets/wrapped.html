@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Wrapped · agy-rpc</title>
+  <link rel="stylesheet" href="/assets/wrapped.css">
+</head>
+<body>
+  <div class="story">
+    <nav class="bars" aria-label="Story progress">
+      {{range .Bars}}
+        <a class="bar {{.Class}}" href="/wrapped?slide={{.Index}}" aria-label="Slide {{.Index}}"><i></i></a>
+      {{end}}
+    </nav>
+
+    <div class="brandtag">AGY-RPC WRAPPED · ANTIGRAVITY + CLAUDE CODE</div>
+
+    {{if .HasPrev}}<a class="tap left" href="/wrapped?slide={{.PrevSlide}}" aria-label="Previous slide"></a>{{end}}
+    {{if .HasNext}}<a class="tap right" href="/wrapped?slide={{.NextSlide}}" aria-label="Next slide"></a>{{end}}
+
+    <main class="slide {{.Theme}}">
+      {{if .Watermark}}<div class="wm">{{.Watermark}}</div>{{end}}
+
+      {{if .IsFinale}}
+        <div class="summary anim d1">
+          <div class="card">
+            <h2>Your Coding Wrapped</h2>
+            <div class="meta">ANTIGRAVITY + CLAUDE CODE · {{.Sessions}} SESSIONS</div>
+            <div class="grid">
+              <div><div class="cellk">Active Time</div><div class="cellv">{{.Hours}}</div></div>
+              <div><div class="cellk">Tokens</div><div class="cellv">{{.Tokens}}</div></div>
+              <div><div class="cellk">API Equiv</div><div class="cellv rust">{{.Cost}}</div></div>
+              <div><div class="cellk">Best Streak</div><div class="cellv grass">{{.LongestStreak}} days</div></div>
+              <div><div class="cellk">Lines Added</div><div class="cellv">+{{.LinesAdded}}</div></div>
+              <div><div class="cellk">Ships</div><div class="cellv">{{.Ships}}</div></div>
+            </div>
+            <div class="foot">agy-rpc v{{.Version}} · Antigravity ({{.AgyHours}}) + Claude Code ({{.ClaudeHours}})</div>
+          </div>
+          <div class="actions">
+            <a class="btn primary" href="/api/card.svg">Download Card SVG</a>
+            <a class="btn" href="/wrapped?slide=0">Replay</a>
+            <a class="btn" href="/">Dashboard</a>
+          </div>
+        </div>
+      {{else}}
+        {{if .Badge}}<div class="tapebadge anim d1">{{.Badge}}</div>{{end}}
+        <div class="kicker anim d1">{{.Kicker}}</div>
+        <div class="{{.FigureClass}} anim d2">{{.Figure}}</div>
+        {{if .ModelRows}}
+          <div class="msplit anim d3">
+            {{range .ModelRows}}
+              <div class="msrow">
+                <span class="lbl">{{.Name}}</span>
+                <span class="mstrack"><span class="msfill" style="width:{{.Pct}}%"></span></span>
+                <span class="pct">{{.Pct}}%</span>
+              </div>
+            {{end}}
+          </div>
+        {{end}}
+        <div class="sub anim d3">{{.Sub}}</div>
+      {{end}}
+    </main>
+
+    <div class="hint">
+      Slide {{.SlideNum}} / {{.TotalSlides}} · Click left/right side to navigate · <a href="/">Back to dashboard</a>
+    </div>
+  </div>
+</body>
+</html>

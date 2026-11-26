@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Settings · agy-rpc</title>
+  <link rel="stylesheet" href="/assets/dashboard.css">
+  <link rel="stylesheet" href="/assets/settings.css">
+</head>
+<body class="settings">
+  <div class="page">
+    <header class="topbar">
+      <a class="brand" href="/">
+        <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 5 19.5"/><path d="M12 3.5 19 19.5"/><path d="M7.6 15.6c2.6-2 6.2-2 8.8 0"/></svg></span>
+        <span>agy-rpc</span>
+        <span class="sub-tag">Settings</span>
+      </a>
+      <div class="top-right">
+        <a class="nav-link" href="/">← Dashboard</a>
+        <a class="wrapped-link" href="/wrapped">Wrapped</a>
+      </div>
+    </header>
+
+    {{if .Saved}}<div class="banner ok">Saved to {{.ConfigPath}} — daemon picks up changes automatically.</div>{{end}}
+    {{if .Error}}<div class="banner err">{{.Error}}</div>{{end}}
+
+    <!-- Daemon -->
+    <section class="set-card">
+      <div class="set-head">
+        <h2>Daemon</h2>
+        <span class="set-hint">Background Discord IPC bridge</span>
+      </div>
+      <div class="daemon-row">
+        <span class="dot {{.DaemonDot}}"></span>
+        <div class="daemon-text">
+          <div class="daemon-title">{{.DaemonTitle}}</div>
+          <div class="daemon-sub">{{.DaemonSub}}</div>
+        </div>
+        <div class="btn-row">
+          <form method="POST" action="/settings/daemon">
+            <input type="hidden" name="status" value="{{.Status}}">
+            <input type="hidden" name="action" value="start">
+            <button type="submit" class="btn">Start</button>
+          </form>
+          <form method="POST" action="/settings/daemon">
+            <input type="hidden" name="status" value="{{.Status}}">
+            <input type="hidden" name="action" value="restart">
+            <button type="submit" class="btn">Restart</button>
+          </form>
+          <form method="POST" action="/settings/daemon">
+            <input type="hidden" name="status" value="{{.Status}}">
+            <input type="hidden" name="action" value="stop">
+            <button type="submit" class="btn">Stop</button>
+          </form>
+        </div>
+      </div>
+      <details class="log">
+        <summary>Daemon log ({{.LogPath}})</summary>
+        <pre>{{.LogTail}}</pre>
+      </details>
+    </section>
+
+    <!-- Main config form (Card + Discord + Behaviour) -->
+    <form method="POST" action="/settings/save">
+      <input type="hidden" name="status" value="{{.Status}}">
+
+      <!-- Card / Presence template editor -->
+      <section class="set-card">
+        <div class="set-head">
+          <h2>Discord Card</h2>
+          <span class="set-hint">Customize text and art per status</span>
+        </div>
+
+        <div class="seg" role="tablist">
+          {{range .StatusTabs}}
+            <a href="/settings?status={{.Key}}" class="{{if .Active}}active{{end}}">{{.Label}}</a>
+          {{end}}
+        </div>
+
+        <div class="preview">
+          <div class="avatar">
+            {{if .PreviewImage}}<img src="{{.PreviewImage}}" alt="Status art">{{end}}
+          </div>
+          <div class="pv-text">
+            <div class="pv-app">{{.PreviewAppName}}</div>
+            <div class="pv-details">{{.PreviewDetails}}</div>
+            <div class="pv-state">{{.PreviewState}}</div>
+          </div>
+        </div>
+
+        <div class="grid2">
+          <label class="field">
+            Top line (details)
+            <input type="text" name="status_details" value="{{.StatusDetails}}" placeholder="Working in {project}">
+          </label>
+          <label class="field">
+            Bottom line (state)
+            <input type="text" name="status_state" value="{{.StatusState}}" placeholder="{currentToolPretty} · {currentFilePretty}">
+          </label>
+          <label class="field">
+            Image URL or Discord asset key
+            <input type="text" name="status_image" value="{{.StatusImage}}" placeholder="/assets/gifs/agy-working.gif or https://...">
+          </label>
+          <label class="field">
+            Image hover text
+            <input type="text" name="status_large_text" value="{{.StatusLargeText}}" placeholder="Working on a {fileLang} file">
+          </label>
+        </div>
+
+        <div class="sub-head">
+          <h3>Antigravity Discord GIFs</h3>
+          <span class="set-hint">Discord requires a public HTTPS URL (set <strong>Public GIF Base URL</strong> below) or assets uploaded to your own Discord App via <span class="code-chip">agy-rpc assets export</span>. Otherwise Discord displays the static Google Antigravity logo.</span>
+        </div>
+        <div class="gif-gallery">
+          {{range .BuiltinGifs}}
+            <div class="gif-tile {{if .Active}}active{{end}}">
+              <img src="{{.Path}}" alt="{{.Label}}">
+              <div class="g-name">{{.Label}}</div>
+              <button type="submit" formaction="/settings/gif/pick" name="gif_path" value="{{.Path}}">{{if .Active}}Active{{else}}Use{{end}}</button>
+            </div>
+          {{end}}
+        </div>
+
+        <details class="vars-details">
+          <summary>Template variables (click to inspect live values)</summary>
+          <table class="vars-table">
+            {{range .VarSamples}}
+              <tr><td><code>&#123;{{.Key}}&#125;</code></td><td>{{.Value}}</td></tr>
+            {{end}}
+          </table>
+        </details>
+
+        {{if .Frames}}
+        <div class="sub-head">
+          <h3>Extra rotation frames for "{{.Status}}"</h3>
+          <span class="set-hint">Shown in rotation when their required variable is non-empty</span>
+        </div>
+        {{range .Frames}}
+          <div class="frame-row">
+            <input type="text" name="frame_details_{{.Index}}" value="{{.Details}}" placeholder="Top line">
+            <input type="text" name="frame_state_{{.Index}}" value="{{.State}}" placeholder="Bottom line">
+            <input type="text" name="frame_requires_{{.Index}}" value="{{.Requires}}" placeholder="Requires (optional)">
+            <button type="submit" formaction="/settings/frames/delete" name="delete_idx" value="{{.Index}}" class="x" title="Remove frame">×</button>
+          </div>
+        {{end}}
+        <input type="hidden" name="frame_count" value="{{len .Frames}}">
+        {{end}}
+
+        <div class="save-actions">
+          <button type="submit" formaction="/settings/frames/add" class="btn ghost">+ Add rotation frame</button>
+          <button type="submit" class="btn primary">Save changes</button>
+        </div>
+      </section>
+
+      <!-- Discord & Agent Sources -->
+      <section class="set-card">
+        <div class="set-head">
+          <h2>Discord &amp; Agent Sources</h2>
+          <span class="set-hint">Application identity and multi-agent merging</span>
+        </div>
+
+        <div class="grid2">
+          <label class="field">
+            App name (default)
+            <input type="text" name="appName" value="{{.Cfg.AppName}}" placeholder="Antigravity">
+          </label>
+          <label class="field">
+            Discord Application ID
+            <input type="text" name="clientId" value="{{.Cfg.ClientID}}" placeholder="1506443909406920948">
+          </label>
+          <label class="field">
+            Public GIF Base URL (optional, for Discord external GIFs)
+            <input type="url" name="gifBaseUrl" value="{{.Cfg.GifBaseURL}}" placeholder="https://raw.githubusercontent.com/you/agy-rpc/main/internal/server/assets/gifs">
+          </label>
+          <label class="field">
+            Activity type
+            <select name="activityType">
+              <option value="0" {{if eq .Cfg.ActivityType 0}}selected{{end}}>Playing</option>
+              <option value="2" {{if eq .Cfg.ActivityType 2}}selected{{end}}>Listening to</option>
+              <option value="3" {{if eq .Cfg.ActivityType 3}}selected{{end}}>Watching</option>
+              <option value="5" {{if eq .Cfg.ActivityType 5}}selected{{end}}>Competing in</option>
+            </select>
+          </label>
+          <div class="checks">
+            <label class="check"><input type="checkbox" name="showElapsed" {{if .Cfg.IsShowElapsed}}checked{{end}}> Show elapsed timer</label>
+            <label class="check"><input type="checkbox" name="githubButton" {{if .Cfg.IsGithubButton}}checked{{end}}> Auto-link public GitHub repos</label>
+          </div>
+        </div>
+
+        <div class="checks row">
+          <label class="check"><input type="checkbox" name="sourceAntigravity" {{if .Cfg.Sources.WantAntigravity}}checked{{end}}> Track Antigravity</label>
+          <label class="check"><input type="checkbox" name="sourceClaude" {{if .Cfg.Sources.WantClaude}}checked{{end}}> Combine Claude Code activity</label>
+          <label class="check"><input type="checkbox" name="dynamicAppName" {{if .Cfg.IsDynamicAppName}}checked{{end}}> Dynamic app name ("Antigravity", "Claude Code", or "Antigravity &amp; Claude")</label>
+        </div>
+
+        <div class="sub-head">
+          <h3>Custom Buttons (max 2)</h3>
+          <span class="set-hint">Shown on your Discord profile card</span>
+        </div>
+        {{range .Buttons}}
+          <div class="button-row">
+            <input type="text" name="btn_label_{{.Index}}" value="{{.Label}}" placeholder="Label (max 32 chars)">
+            <input type="url" name="btn_url_{{.Index}}" value="{{.URL}}" placeholder="https://...">
+            <button type="submit" formaction="/settings/buttons/delete" name="delete_btn_idx" value="{{.Index}}" class="x" title="Remove button">×</button>
+          </div>
+        {{end}}
+        <input type="hidden" name="btn_count" value="{{len .Buttons}}">
+        <div class="save-actions">
+          {{if lt (len .Buttons) 2}}
+            <button type="submit" formaction="/settings/buttons/add" class="btn ghost">+ Add button</button>
+          {{end}}
+          <button type="submit" class="btn primary">Save changes</button>
+        </div>
+      </section>
+
+      <!-- Behaviour -->
+      <section class="set-card">
+        <div class="set-head">
+          <h2>Behaviour</h2>
+          <span class="set-hint">Rotation timing, idle windows, and notifications</span>
+        </div>
+        <div class="grid3">
+          <label class="field">
+            Rotation interval
+            <span class="unit"><input type="number" min="4" name="rotationSec" value="{{.RotationSec}}"> sec</span>
+          </label>
+          <label class="field">
+            Idle after
+            <span class="unit"><input type="number" min="10" name="idleThresholdSec" value="{{.Cfg.IdleThresholdSec}}"> sec</span>
+          </label>
+          <label class="field">
+            Stale after
+            <span class="unit"><input type="number" min="1" name="staleSessionMin" value="{{.Cfg.StaleSessionMin}}"> min</span>
+          </label>
+          <label class="field">
+            Shipped badge
+            <span class="unit"><input type="number" min="0" name="shippedFrameSec" value="{{.Cfg.ShippedFrameSec}}"> sec</span>
+          </label>
+        </div>
+        <div class="checks row">
+          <label class="check"><input type="checkbox" name="hideWhenStale" {{if .Cfg.IsHideWhenStale}}checked{{end}}> Clear Discord presence when away</label>
+          <label class="check"><input type="checkbox" name="notifyEnabled" {{if .Cfg.Notify.Enabled}}checked{{end}}> Desktop notification when waiting on input</label>
+          <label class="check"><input type="checkbox" name="processDetection" {{if .Cfg.IsProcessDetection}}checked{{end}}> Detect running Antigravity / Claude processes</label>
+        </div>
+        <div class="save-actions">
+          <button type="submit" class="btn primary">Save changes</button>
+        </div>
+      </section>
+    </form>
+
+    <!-- Per-workspace Privacy -->
+    <section class="set-card">
+      <div class="set-head">
+        <h2>Workspace Privacy</h2>
+        <span class="set-hint">Control what Discord shows for each repository</span>
+      </div>
+      {{range .Workspaces}}
+        <div class="ws-row">
+          <div class="ws-meta">
+            <div class="ws-name">{{.Name}}</div>
+            <div class="ws-path">{{.Path}}</div>
+          </div>
+          <div class="seg">
+            <form method="POST" action="/settings/privacy">
+              <input type="hidden" name="status" value="{{$.Status}}">
+              <input type="hidden" name="cwd" value="{{.Path}}">
+              <input type="hidden" name="visibility" value="public">
+              <button type="submit" class="{{if eq .Visibility "public"}}active{{end}}">Public</button>
+            </form>
+            <form method="POST" action="/settings/privacy">
+              <input type="hidden" name="status" value="{{$.Status}}">
+              <input type="hidden" name="cwd" value="{{.Path}}">
+              <input type="hidden" name="visibility" value="name-only">
+              <button type="submit" class="{{if eq .Visibility "name-only"}}active{{end}}">Name only</button>
+            </form>
+            <form method="POST" action="/settings/privacy">
+              <input type="hidden" name="status" value="{{$.Status}}">
+              <input type="hidden" name="cwd" value="{{.Path}}">
+              <input type="hidden" name="visibility" value="hidden">
+              <button type="submit" class="{{if eq .Visibility "hidden"}}active{{end}}">Hidden</button>
+            </form>
+          </div>
+        </div>
+      {{else}}
+        <div class="set-hint">No workspaces recorded yet. Run a session in Antigravity or Claude Code first.</div>
+      {{end}}
+    </section>
+
+    <footer>
+      <span>Config: {{.ConfigPath}}</span>
+      <span>Pure Go SSR · Zero JavaScript</span>
+    </footer>
+  </div>
+</body>
+</html>

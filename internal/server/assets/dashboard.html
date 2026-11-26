@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  {{if .AutoRefresh}}<meta http-equiv="refresh" content="10">{{end}}
+  <title>agy-rpc · Antigravity + Claude Code</title>
+  <link rel="stylesheet" href="/assets/dashboard.css">
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a class="brand" href="/">
+        <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 5 19.5"/><path d="M12 3.5 19 19.5"/><path d="M7.6 15.6c2.6-2 6.2-2 8.8 0"/></svg></span>
+        <span>agy-rpc</span>
+        <span class="sub-tag">Antigravity</span>
+      </a>
+      <div class="top-right">
+        <nav class="range-pills" aria-label="Time range">
+          {{range .Ranges}}
+            <a href="/?range={{.Key}}" class="{{if .Active}}active{{end}}">{{.Label}}</a>
+          {{end}}
+        </nav>
+        <span class="status-pill {{.Status}}">{{.StatusLabel}}</span>
+        <a class="wrapped-link" href="/wrapped">Wrapped →</a>
+        <a class="nav-link" href="/settings">Settings</a>
+      </div>
+    </header>
+
+    <div class="live-rail">
+      <div class="avatar">
+        {{if .LiveAvatar}}<img src="{{.LiveAvatar}}" alt="Discord avatar">{{end}}
+      </div>
+      <div>
+        <span class="app-badge">{{.LiveAppName}}</span>
+        <div class="frame-details">{{.LiveDetails}}</div>
+        <div class="frame-state">{{.LiveState}}</div>
+      </div>
+      <div class="right">
+        <div class="frame-num">{{.LiveSource}} · {{.LiveModel}}</div>
+        <div class="elapsed num">{{.LiveElapsed}}</div>
+      </div>
+    </div>
+
+    {{if .Insights}}
+    <div class="insights">
+      {{range .Insights}}
+        <div class="insight">{{.}}</div>
+      {{end}}
+    </div>
+    {{end}}
+
+    <section class="hero">
+      <div>
+        <div class="eyebrow">{{.RangeTitle}} Active Coding</div>
+        <div class="figure num">{{.HeroHours}}</div>
+        <div class="caption">{{.HeroCaption}}</div>
+      </div>
+      <div class="chart-block">
+        <div class="chart-head">
+          <span class="chart-title">Daily activity</span>
+          <span class="chart-side"><strong>{{.RangeSessions}}</strong> sessions · <strong>{{.RangePrompts}}</strong> prompts</span>
+        </div>
+        <div class="chart-wrap">
+          {{.ActivityChartSVG}}
+        </div>
+      </div>
+    </section>
+
+    <div class="stat-row">
+      <div class="stat-card">
+        <div class="label">Tokens</div>
+        <div class="value num">{{.StatTokens}}</div>
+        <div class="meta">{{.StatCachePct}} cached · {{.StatFreshTokens}} fresh</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">API Equivalent</div>
+        <div class="value num">{{.StatCost}}</div>
+        <div class="meta">{{.TodayCost}} today · {{.AllCost}} all-time</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Streak</div>
+        <div class="value num">{{.Streak}}d</div>
+        <div class="meta">Best {{.LongestStreak}}d · Day {{.DaysSinceFirst}}</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Dual-Agent Split</div>
+        <div class="value num">{{.AgySessions}} / {{.ClaudeSessions}}</div>
+        <div class="meta">Agy {{.AgyHours}} · Claude {{.ClaudeHours}}</div>
+      </div>
+    </div>
+
+    <section>
+      <div class="section-head">
+        <h2>90-Day Heatmap</h2>
+        <span class="right">Click any day for breakdown</span>
+      </div>
+      <div class="card heatmap-card">
+        <div class="heatmap-grid">
+          {{range .HeatmapCells}}
+            <a class="heatmap-cell {{.Level}}" href="/?range={{$.Range}}&day={{.Day}}" title="{{.Day}}: {{.Hours}} ({{.Prompts}} prompts)"></a>
+          {{end}}
+        </div>
+      </div>
+    </section>
+
+    <div class="split-row">
+      <div class="card">
+        <div class="card-h">
+          <h3>Model Split</h3>
+          <span class="meta">All-time API equivalent</span>
+        </div>
+        <div class="cost-grid">
+          <div>
+            <div class="cost-figure num">{{.AllCost}}</div>
+            <div class="cost-sub">{{.AllTokens}} lifetime tokens</div>
+          </div>
+          <div class="cost-bars">
+            {{range .Models}}
+              <div class="cost-bar">
+                <span class="name" title="{{.Name}}">{{.Name}}</span>
+                <span class="track"><span class="fill" style="width:{{.Pct}}%"></span></span>
+                <span class="val num">{{.Cost}}</span>
+              </div>
+            {{else}}
+              <div class="cost-sub">Run <code>agy-rpc scan</code> to populate model stats.</div>
+            {{end}}
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h">
+          <h3>Languages</h3>
+          <span class="meta">By edited files</span>
+        </div>
+        {{if .Languages}}
+          <div class="lang-stack">
+            {{range .Languages}}
+              <span style="width:{{.Pct}}%;background:{{.Color}}" title="{{.Name}} ({{.Edits}} edits)"></span>
+            {{end}}
+          </div>
+          <div class="lang-list">
+            {{range .Languages}}
+              <div class="row">
+                <span class="swatch" style="background:{{.Color}}"></span>
+                <span>{{.Name}}</span>
+                <span class="val num">{{.Edits}} edits</span>
+              </div>
+            {{end}}
+          </div>
+        {{else}}
+          <div class="cost-sub">No language edits scanned yet.</div>
+        {{end}}
+      </div>
+    </div>
+
+    <section>
+      <div class="section-head">
+        <h2>Code Churn</h2>
+        <span class="right">{{.RangeShips}} ships in window</span>
+      </div>
+      <div class="card">
+        <div class="churn-row">
+          <div class="churn-spark">{{.ChurnSparkSVG}}</div>
+          <div class="churn-numbers">
+            <div class="row"><span class="label">Added</span><span class="added num">+{{.LinesAdded}}</span></div>
+            <div class="row"><span class="label">Removed</span><span class="removed num">-{{.LinesRemoved}}</span></div>
+            <div class="row"><span class="label">Net</span><span class="num">{{.LinesNet}}</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>Achievements</h2>
+        <span class="right">{{.UnlockedCount}} / {{len .Achievements}} unlocked</span>
+      </div>
+      <div class="achievements">
+        {{range .Achievements}}
+          <div class="achievement {{if .Unlocked}}unlocked{{end}}">
+            <span class="ico">{{.Icon}}</span>
+            <div class="t">{{.Title}}</div>
+            <div class="s">{{.Sub}}</div>
+          </div>
+        {{end}}
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>Leaderboards</h2>
+        <span class="right">Click a project for details</span>
+      </div>
+      <div class="lb-grid">
+        <div class="lb">
+          <div class="lb-h"><span class="t">Projects</span><span class="s">Active time</span></div>
+          <table>
+            {{range .TopProjects}}
+              <tr>
+                <td class="name"><a href="/?range={{$.Range}}&project={{.Name}}">{{.Name}}</a></td>
+                <td class="val num">{{.Value}}</td>
+              </tr>
+            {{else}}
+              <tr><td class="name">No projects yet</td><td class="val">—</td></tr>
+            {{end}}
+          </table>
+        </div>
+        <div class="lb">
+          <div class="lb-h"><span class="t">Tools</span><span class="s">Calls</span></div>
+          <table>
+            {{range .TopTools}}
+              <tr><td class="name">{{.Name}}</td><td class="val num">{{.Value}}</td></tr>
+            {{else}}
+              <tr><td class="name">No tools yet</td><td class="val">—</td></tr>
+            {{end}}
+          </table>
+        </div>
+        <div class="lb">
+          <div class="lb-h"><span class="t">Hotspot Files</span><span class="s">Edits</span></div>
+          <table>
+            {{range .TopFiles}}
+              <tr><td class="name" title="{{.Full}}">{{.Name}}</td><td class="val num">{{.Value}}</td></tr>
+            {{else}}
+              <tr><td class="name">No edits yet</td><td class="val">—</td></tr>
+            {{end}}
+          </table>
+        </div>
+        <div class="lb">
+          <div class="lb-h"><span class="t">Shell Commands</span><span class="s">Runs</span></div>
+          <table>
+            {{range .TopShell}}
+              <tr><td class="name">{{.Name}}</td><td class="val num">{{.Value}}</td></tr>
+            {{else}}
+              <tr><td class="name">No commands yet</td><td class="val">—</td></tr>
+            {{end}}
+          </table>
+        </div>
+        <div class="lb">
+          <div class="lb-h"><span class="t">Web Domains</span><span class="s">Fetches</span></div>
+          <table>
+            {{range .TopDomains}}
+              <tr><td class="name">{{.Name}}</td><td class="val num">{{.Value}}</td></tr>
+            {{else}}
+              <tr><td class="name">No domains yet</td><td class="val">—</td></tr>
+            {{end}}
+          </table>
+        </div>
+        <div class="lb">
+          <div class="lb-h"><span class="t">Subagents</span><span class="s">Spawns</span></div>
+          <table>
+            {{range .TopSubagents}}
+              <tr><td class="name">{{.Name}}</td><td class="val num">{{.Value}}</td></tr>
+            {{else}}
+              <tr><td class="name">No subagents yet</td><td class="val">—</td></tr>
+            {{end}}
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>Discord Rotation Frames</h2>
+        <span class="right">Status: {{.Status}}</span>
+      </div>
+      <div class="discord">
+        <ul class="rotation-list">
+          {{range .RotationFrames}}
+            <li class="{{if .Passing}}live{{end}}">
+              <span class="pip"></span>
+              <span><strong>{{.Details}}</strong> — {{.State}}</span>
+            </li>
+          {{end}}
+        </ul>
+      </div>
+    </section>
+
+    <footer>
+      <span>agy-rpc v{{.Version}} · Pure Go SSR (0 bytes JS)</span>
+      <span>
+        <a href="/api/badge.svg">badge.svg</a> ·
+        <a href="/api/card.svg">card.svg</a> ·
+        <a href="/api/export.csv">export.csv</a> ·
+        <a href="/api/export.json">export.json</a>
+      </span>
+    </footer>
+  </div>
+
+  {{if .SelectedDay}}
+  <a class="scrim" href="/?range={{.Range}}" aria-label="Close modal"></a>
+  <div class="modal" role="dialog" aria-label="Day breakdown">
+    <a class="close-btn" href="/?range={{.Range}}">×</a>
+    <h4>{{.SelectedDay.Day}}</h4>
+    <div class="sub">Daily breakdown</div>
+    <div class="kv"><span class="k">Active coding</span><span class="v">{{.SelectedDay.Hours}}</span></div>
+    <div class="kv"><span class="k">Sessions</span><span class="v">{{.SelectedDay.Sessions}}</span></div>
+    <div class="kv"><span class="k">Prompts</span><span class="v">{{.SelectedDay.Prompts}}</span></div>
+    <div class="kv"><span class="k">Tool calls</span><span class="v">{{.SelectedDay.Tools}}</span></div>
+    <div class="kv"><span class="k">Tokens</span><span class="v">{{.SelectedDay.Tokens}}</span></div>
+    <div class="kv"><span class="k">API equivalent</span><span class="v">{{.SelectedDay.Cost}}</span></div>
+    <div class="kv"><span class="k">Code churn</span><span class="v">+{{.SelectedDay.Added}} / -{{.SelectedDay.Removed}}</span></div>
+    <div class="kv"><span class="k">Ships</span><span class="v">{{.SelectedDay.Ships}}</span></div>
+  </div>
+  {{end}}
+
+  {{if .SelectedProject}}
+  <a class="scrim" href="/?range={{.Range}}" aria-label="Close drawer"></a>
+  <aside class="drawer" role="dialog" aria-label="Project breakdown">
+    <a class="close-btn" href="/?range={{.Range}}">×</a>
+    <h3>{{.SelectedProject.Name}}</h3>
+    <div class="sub">Project stats</div>
+    <div class="kv"><span class="k">Active coding</span><span class="v">{{.SelectedProject.Hours}}</span></div>
+    <div class="kv"><span class="k">Sessions</span><span class="v">{{.SelectedProject.Sessions}}</span></div>
+    <div class="kv"><span class="k">Prompts</span><span class="v">{{.SelectedProject.Prompts}}</span></div>
+    <div class="kv"><span class="k">Tool calls</span><span class="v">{{.SelectedProject.Tools}}</span></div>
+    <div class="kv"><span class="k">Fresh tokens</span><span class="v">{{.SelectedProject.Tokens}}</span></div>
+    <div class="kv"><span class="k">API equivalent</span><span class="v">{{.SelectedProject.Cost}}</span></div>
+    <div class="kv"><span class="k">Code churn</span><span class="v">+{{.SelectedProject.Added}} / -{{.SelectedProject.Removed}}</span></div>
+  </aside>
+  {{end}}
+</body>
+</html>

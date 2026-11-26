@@ -1,0 +1,8 @@
+/agy-rpc
+/antigravity-rpc
+*.exe
+config.json
+*.log
+.DS_Store
+*.png
+*.svg

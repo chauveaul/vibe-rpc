@@ -649,6 +649,8 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 		todayCost = pricing.FmtCost(todayB.Cost)
 	}
 
+	cmp := buildCompare(agg, rng)
+
 	data := map[string]any{
 		"Version":          paths.Version,
 		"AutoRefresh":      selDay == nil && selProj == nil,
@@ -680,10 +682,8 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 		"Streak":           agg.Streak,
 		"LongestStreak":    agg.LongestStreak,
 		"DaysSinceFirst":   agg.DaysSinceFirst,
-		"AgySessions":      agySrc.Sessions,
-		"ClaudeSessions":   ccSrc.Sessions,
-		"AgyHours":         format.FmtHours(agySrc.ActiveMs),
-		"ClaudeHours":      format.FmtHours(ccSrc.ActiveMs),
+		"Compare":          cmp,
+		"Running":          listRunning(cfg, st.SessionID),
 		"HeatmapCells":     cells,
 		"Models":           models,
 		"Languages":        langs,

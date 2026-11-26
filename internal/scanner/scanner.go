@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	CacheVersion   = 1
+	CacheVersion   = 2 // v2: per-session active spans (dual-wielding time)
 	ActiveGapCapMs = 5 * 60 * 1000
 )
 
@@ -112,6 +112,16 @@ type SourceStats struct {
 	UserMessages int     `json:"userMessages"`
 }
 
+// SourceDay is one agent's activity on one local day.
+type SourceDay struct {
+	ActiveMs int64          `json:"activeMs"`
+	Sessions int            `json:"sessions"`
+	Prompts  int            `json:"prompts"`
+	Tokens   int64          `json:"tokens"`
+	Cost     float64        `json:"cost"`
+	Tools    map[string]int `json:"tools,omitempty"` // attributed to the session's first day
+}
+
 type BestDay struct {
 	Day string `json:"day"`
 	DayBucket
@@ -142,6 +152,7 @@ type TranscriptSummary struct {
 	ByDay            map[string]*DayBucket    `json:"byDay"`
 	ByWeek           map[string]*DayBucket    `json:"byWeek"`
 	ByHour           map[string]*DayBucket    `json:"byHour"`
+	Spans            [][2]int64               `json:"spans,omitempty"` // merged active [start,end) ms intervals
 	FileEdits        map[string]int           `json:"fileEdits"`
 	FileEditTs       map[string]int64         `json:"fileEditTs"`
 	LinesAdded       int                      `json:"linesAdded"`
@@ -211,6 +222,9 @@ type Aggregate struct {
 	ByModel          map[string]*ModelBucket  `json:"byModel"`
 	ModelSplit       []ModelSplitEntry        `json:"modelSplit"`
 	BySource         map[string]*SourceStats  `json:"bySource"`
+	SourceDays       map[string]map[string]*SourceDay `json:"sourceDays,omitempty"` // source -> day -> stats
+	DualMs           int64                    `json:"dualMs"`                                // time both agents were active at once
+	DualByDay        map[string]int64         `json:"dualByDay,omitempty"`
 	Notifications    int                      `json:"notifications"`
 	Compactions      int                      `json:"compactions"`
 	CompactionsByDay map[string]int           `json:"compactionsByDay"`
@@ -751,6 +765,11 @@ func ParseTranscript(filePath string, sessionCwds map[string]string) (*Transcrip
 				ensureDay(s.ByDay, prev.day).ActiveMs += gap
 				ensureDay(s.ByWeek, prev.week).ActiveMs += gap
 				ensureDay(s.ByHour, prev.hour).ActiveMs += gap
+				if n := len(s.Spans); n > 0 && s.Spans[n-1][1] == prev.ts {
+					s.Spans[n-1][1] = records[i].ts
+				} else {
+					s.Spans = append(s.Spans, [2]int64{prev.ts, records[i].ts})
+				}
 			}
 		}
 	}
@@ -1229,11 +1248,14 @@ func AggregateFrom(cache *ScanCache) *Aggregate {
 			"claude":      {},
 		},
 		CompactionsByDay: map[string]int{},
+		SourceDays:       map[string]map[string]*SourceDay{"antigravity": {}, "claude": {}},
+		DualByDay:        map[string]int64{},
 		GeneratedAt:      time.Now().UnixMilli(),
 		Version:          CacheVersion,
 	}
 
 	fileSet := map[string]bool{}
+	spansBySource := map[string][][2]int64{}
 	for p, s := range cache.Files {
 		if s == nil {
 			continue
@@ -1251,7 +1273,9 @@ func AggregateFrom(cache *ScanCache) *Aggregate {
 			sb.Sessions++
 			sb.ActiveMs += s.ActiveMs
 			sb.UserMessages += s.UserMessages
+			spansBySource[srcKey] = append(spansBySource[srcKey], s.Spans...)
 		}
+		addSourceDays(agg.SourceDays[srcKey], s, isSub)
 
 		agg.InputTokens += s.InputTokens
 		agg.OutputTokens += s.OutputTokens
@@ -1380,6 +1404,7 @@ func AggregateFrom(cache *ScanCache) *Aggregate {
 		}
 	}
 
+	agg.DualMs = overlapByDay(mergeSpans(spansBySource["antigravity"]), mergeSpans(spansBySource["claude"]), agg.DualByDay)
 	agg.UniqueFiles = len(fileSet)
 	agg.LinesNet = agg.LinesAdded - agg.LinesRemoved
 
@@ -1652,4 +1677,90 @@ func Scan(opts ScanOptions) ScanResult {
 	agg := AggregateFrom(cache)
 	writeAggregate(agg)
 	return ScanResult{Aggregate: agg, Scanned: scanned, Skipped: skipped, Removed: removed, Total: len(transcripts)}
+}
+
+func addSourceDays(days map[string]*SourceDay, s *TranscriptSummary, isSub bool) {
+	get := func(k string) *SourceDay {
+		d := days[k]
+		if d == nil {
+			d = &SourceDay{}
+			days[k] = d
+		}
+		return d
+	}
+	for k, b := range s.ByDay {
+		if b == nil {
+			continue
+		}
+		d := get(k)
+		d.Tokens += b.InputTokens + b.OutputTokens + b.CacheReadTokens + b.CacheWriteTokens
+		d.Cost += b.Cost
+		if !isSub {
+			d.ActiveMs += b.ActiveMs
+			d.Prompts += b.UserMessages
+		}
+	}
+	if s.FirstTs <= 0 {
+		return
+	}
+	d := get(DayKey(s.FirstTs))
+	if !isSub {
+		d.Sessions++
+	}
+	if len(s.ToolBreakdown) > 0 && d.Tools == nil {
+		d.Tools = map[string]int{}
+	}
+	for name, n := range s.ToolBreakdown {
+		d.Tools[name] += n
+	}
+}
+
+// mergeSpans sorts and unions overlapping [start,end) intervals.
+func mergeSpans(in [][2]int64) [][2]int64 {
+	if len(in) == 0 {
+		return nil
+	}
+	sp := make([][2]int64, len(in))
+	copy(sp, in)
+	sort.Slice(sp, func(i, j int) bool { return sp[i][0] < sp[j][0] })
+	out := [][2]int64{sp[0]}
+	for _, x := range sp[1:] {
+		last := &out[len(out)-1]
+		if x[0] <= last[1] {
+			if x[1] > last[1] {
+				last[1] = x[1]
+			}
+			continue
+		}
+		out = append(out, x)
+	}
+	return out
+}
+
+// overlapByDay returns the total intersection of two merged span lists and
+// adds each overlapping stretch to byDay, split at local midnight.
+func overlapByDay(a, b [][2]int64, byDay map[string]int64) int64 {
+	var total int64
+	i, j := 0, 0
+	for i < len(a) && j < len(b) {
+		lo, hi := max(a[i][0], b[j][0]), min(a[i][1], b[j][1])
+		if hi > lo {
+			total += hi - lo
+			for t := lo; t < hi; {
+				d := time.UnixMilli(t).Local()
+				next := time.Date(d.Year(), d.Month(), d.Day()+1, 0, 0, 0, 0, time.Local).UnixMilli()
+				end := min(next, hi)
+				if byDay != nil {
+					byDay[DayKey(t)] += end - t
+				}
+				t = end
+			}
+		}
+		if a[i][1] < b[j][1] {
+			i++
+		} else {
+			j++
+		}
+	}
+	return total
 }

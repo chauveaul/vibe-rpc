@@ -51,6 +51,34 @@
       </div>
     </div>
 
+    <section class="running" aria-labelledby="running-h">
+      <div class="section-head">
+        <h2 id="running-h">Running now</h2>
+        <span class="right">{{len .Running}} open session{{if ne (len .Running) 1}}s{{end}} · refreshes every 10s</span>
+      </div>
+      {{if .Running}}
+      <ul class="run-list">
+        {{range .Running}}
+          <li class="run-row {{.SourceKey}}{{if .OnDiscord}} on-discord{{end}}">
+            <span class="run-src"><span class="src-dot {{.SourceKey}}" aria-hidden="true"></span>{{.Source}}</span>
+            <span class="run-main">
+              <span class="run-proj" title="{{.Path}}">{{.Project}}</span>
+              <span class="run-doing">{{if .Doing}}{{.Doing}}{{else}}{{.Model}}{{end}}</span>
+            </span>
+            <span class="run-tags">
+              {{if .OnDiscord}}<span class="tag live">On Discord</span>{{end}}
+              {{if .Privacy}}<span class="tag">{{.Privacy}}</span>{{end}}
+            </span>
+            <span class="run-status {{.Status}}"><span class="pip" aria-hidden="true"></span>{{.StatusText}}</span>
+            <span class="run-time num">{{if .Elapsed}}{{.Elapsed}}{{else}}—{{end}}<small>{{.LastSeen}}</small></span>
+          </li>
+        {{end}}
+      </ul>
+      {{else}}
+      <div class="run-empty">No sessions running. Open Antigravity or Claude Code and they'll show up here.</div>
+      {{end}}
+    </section>
+
     {{if .Insights}}
     <div class="insights">
       {{range .Insights}}
@@ -93,11 +121,66 @@
         <div class="meta">Best {{.LongestStreak}}d · Day {{.DaysSinceFirst}}</div>
       </div>
       <div class="stat-card">
-        <div class="label">Dual-Agent Split</div>
-        <div class="value num">{{.AgySessions}} / {{.ClaudeSessions}}</div>
-        <div class="meta">Agy {{.AgyHours}} · Claude {{.ClaudeHours}}</div>
+        <div class="label">Dual Wielding</div>
+        <div class="value num">{{.Compare.DualHours}}</div>
+        <div class="meta">{{.Compare.DualPct}} of active time · both agents at once</div>
       </div>
     </div>
+
+    <section aria-labelledby="vs-h">
+      <div class="section-head">
+        <h2 id="vs-h">Antigravity vs Claude Code</h2>
+        <span class="right">{{.RangeTitle}}</span>
+      </div>
+      <div class="card versus">
+        <div class="vs-head">
+          <span class="vs-side agy"><span class="src-dot antigravity" aria-hidden="true"></span>Antigravity</span>
+          <span class="vs-mid">vs</span>
+          <span class="vs-side cc">Claude Code<span class="src-dot claude" aria-hidden="true"></span></span>
+        </div>
+        {{if .Compare.HasData}}
+        <table class="vs-table">
+          <caption class="sr-only">Antigravity and Claude Code compared for {{.RangeTitle}}</caption>
+          <thead class="sr-only"><tr><th scope="col">Antigravity</th><th scope="col">Metric</th><th scope="col">Claude Code</th></tr></thead>
+          <tbody>
+          {{range .Compare.Rows}}
+            <tr>
+              <td class="vs-val agy num{{if .AgyLeads}} lead{{end}}">{{.Agy}}</td>
+              <th scope="row" class="vs-metric">
+                <span class="vs-label">{{.Label}}</span>
+                <span class="vs-bar" aria-hidden="true"><span class="a" style="width:{{.AgyPct}}%"></span><span class="c" style="width:{{.ClaudePct}}%"></span></span>
+              </th>
+              <td class="vs-val cc num{{if .CCLeads}} lead{{end}}">{{.Claude}}</td>
+            </tr>
+          {{end}}
+          </tbody>
+        </table>
+        <div class="vs-tools">
+          <div>
+            <div class="vs-tools-h">Top tools</div>
+            {{range .Compare.AgyTools}}
+              <div class="tool-row"><span class="name">{{.Name}}</span><span class="track"><span class="fill" style="width:{{.Pct}}%"></span></span><span class="val num">{{.Count}}</span></div>
+            {{else}}
+              <div class="vs-none">No tool calls in this range</div>
+            {{end}}
+          </div>
+          <div>
+            <div class="vs-tools-h">Top tools</div>
+            {{range .Compare.ClaudeTools}}
+              <div class="tool-row"><span class="name">{{.Name}}</span><span class="track"><span class="fill" style="width:{{.Pct}}%"></span></span><span class="val num">{{.Count}}</span></div>
+            {{else}}
+              <div class="vs-none">No tool calls in this range</div>
+            {{end}}
+          </div>
+        </div>
+        <div class="vs-foot">
+          <span><strong class="num">{{.Compare.DualHours}}</strong> dual-wielding · {{.Compare.DualPct}} of your active time had both agents running at once</span>
+        </div>
+        {{else}}
+        <div class="vs-none pad">No activity in this range yet. Try a longer range, or run <code>vibe-rpc scan</code>.</div>
+        {{end}}
+      </div>
+    </section>
 
     <section>
       <div class="section-head">

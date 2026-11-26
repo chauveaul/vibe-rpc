@@ -1248,9 +1248,10 @@ func AggregateFrom(cache *ScanCache) *Aggregate {
 			"antigravity": {},
 			"claude":      {},
 			"opencode":    {},
+			"codex":       {},
 		},
 		CompactionsByDay: map[string]int{},
-		SourceDays:       map[string]map[string]*SourceDay{"antigravity": {}, "claude": {}, "opencode": {}},
+		SourceDays:       map[string]map[string]*SourceDay{"antigravity": {}, "claude": {}, "opencode": {}, "codex": {}},
 		DualByDay:        map[string]int64{},
 		GeneratedAt:      time.Now().UnixMilli(),
 		Version:          CacheVersion,
@@ -1624,6 +1625,13 @@ func Scan(opts ScanOptions) ScanResult {
 	if cfg.Sources.WantClaude() {
 		dirs = append(dirs, DiscoverClaudeProjectDirs()...)
 	}
+	if cfg.Sources.WantCodex() {
+		for _, d := range CodexDirs() {
+			if fi, err := os.Stat(d); err == nil && fi.IsDir() {
+				dirs = append(dirs, d)
+			}
+		}
+	}
 	dirs = append(dirs, opts.ExtraDirs...)
 
 	seen := map[string]bool{}
@@ -1675,12 +1683,17 @@ func Scan(opts ScanOptions) ScanResult {
 			}
 			continue
 		}
-		sum, err := ParseTranscript(fp, cwds)
+		var sum *TranscriptSummary
+		if isCodexRollout(fp) {
+			sum, err = ParseCodexRollout(fp)
+		} else {
+			sum, err = ParseTranscript(fp, cwds)
+		}
 		if err != nil {
 			continue
 		}
 		sum.Sig = sig
-		sum.IsSubagent = strings.Contains(strings.ReplaceAll(fp, "\\", "/"), "/subagents/")
+		sum.IsSubagent = sum.IsSubagent || strings.Contains(strings.ReplaceAll(fp, "\\", "/"), "/subagents/")
 		cache.Files[fp] = sum
 		scanned++
 	}
@@ -1807,7 +1820,7 @@ func ActiveWithin(spans [][2]int64, from, to int64) int64 {
 // SourceKey normalizes a session's source to an aggregate bucket key.
 func SourceKey(source string) string {
 	switch source {
-	case "claude", "opencode":
+	case "claude", "opencode", "codex":
 		return source
 	}
 	return "antigravity"

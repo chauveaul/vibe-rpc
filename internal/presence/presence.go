@@ -202,6 +202,11 @@ func ResolveLargeImageKeyForSource(cfg config.Config, source, status, model stri
 			return v
 		}
 	}
+	if source == "codex" && cfg.CodexStatusAssets != nil {
+		if v := cfg.CodexStatusAssets[status]; v != "" {
+			return v
+		}
+	}
 	if source == "opencode" && cfg.OpenCodeStatusAssets != nil {
 		if v := cfg.OpenCodeStatusAssets[status]; v != "" {
 			return v
@@ -264,7 +269,7 @@ func PickDualSnapshots(sessions []state.SessionState, live []state.LiveSession, 
 		if s.LastActivity > 0 && nowMs-s.LastActivity > staleMs {
 			continue
 		}
-		if s.Source == "opencode" {
+		if s.Source == "opencode" || s.Source == "codex" {
 			continue // not part of the Antigravity + Claude Code dual model
 		}
 		if s.Source == "claude" {
@@ -345,7 +350,7 @@ func ComputeActiveSources(sessions []state.SessionState, live []state.LiveSessio
 			if wantClaude {
 				claudeOn = true
 			}
-		} else if s.Source != "opencode" && wantAgy {
+		} else if s.Source != "opencode" && s.Source != "codex" && wantAgy {
 			agyOn = true
 		}
 	}
@@ -392,8 +397,8 @@ func ResolveAppName(st state.SessionState, cfg config.Config) string {
 	if !cfg.IsDynamicAppName() {
 		return base
 	}
-	if st.Source == "opencode" {
-		return "OpenCode"
+	if st.Source == "opencode" || st.Source == "codex" {
+		return config.AgentName(st.Source)
 	}
 	agyOn := st.AntigravityActive
 	claudeOn := st.ClaudeActive
@@ -470,6 +475,7 @@ func DiscordListOptions(cfg config.Config) state.ListOptions {
 		IncludeAntigravity: cfg.ShowOnDiscord("antigravity"),
 		IncludeClaude:      cfg.ShowOnDiscord("claude"),
 		IncludeOpenCode:    cfg.ShowOnDiscord("opencode"),
+		IncludeCodex:       cfg.ShowOnDiscord("codex"),
 		IncludeClaudeRPC:   true,
 	}
 }
@@ -479,7 +485,7 @@ func FilterLiveForDiscord(live []state.LiveSession, cfg config.Config) []state.L
 	out := live[:0:0]
 	for _, ls := range live {
 		src := ls.Source
-		if src != "claude" && src != "opencode" {
+		if src != "claude" && src != "opencode" && src != "codex" {
 			src = "antigravity"
 		}
 		if cfg.ShowOnDiscord(src) {

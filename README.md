@@ -82,9 +82,14 @@ git tag v2.1.0 && git push origin v2.1.0
 
 Dry run locally with `goreleaser release --snapshot --clean`.
 
-## OpenCode
+## OpenCode and Codex
 
-vibe-rpc also tracks [OpenCode](https://opencode.ai) sessions. `vibe-rpc setup` installs a small plugin at `~/.config/opencode/plugin/vibe-rpc.js` that forwards OpenCode's events (prompts, tool calls, permission prompts, idle) to vibe-rpc, so OpenCode shows on Discord, in the dashboard's running sessions and in VibeNotch's alerts. History (tokens, cost, active time, tools) is read from OpenCode's database with `opencode db`, so nothing extra is needed. Skip it with `vibe-rpc setup --no-opencode` or untick **Track OpenCode** in Settings.
+Besides Antigravity and Claude Code, vibe-rpc tracks [OpenCode](https://opencode.ai) and [Codex CLI](https://developers.openai.com/codex). `vibe-rpc setup` lists the agents it finds and asks which to track (or pass `--agents antigravity,claude,opencode,codex`), then wires each one:
+
+- **OpenCode:** a small plugin at `~/.config/opencode/plugin/vibe-rpc.js` forwards prompts, tool calls, permission prompts and idle events. History (tokens, cost, active time, tools) is read from OpenCode's database with `opencode db`.
+- **Codex:** vibe-rpc adds hooks to `~/.codex/hooks.json` (your own hooks are kept; Codex asks you to trust new hooks once). History is read from Codex's session rollouts in `~/.codex/sessions`. Codex doesn't record cost, so its API-equivalent shows as $0.
+
+Both show on Discord, in the dashboard's comparison and running sessions, and in VibeNotch's permission alerts. In **Settings → Agents**, each agent has a **Track** switch and a **Show on Discord** switch, so you can keep an agent's stats without it appearing on your profile.
 
 ## VibeNotch (macOS)
 

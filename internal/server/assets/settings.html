@@ -233,6 +233,31 @@
             </div>
           </div>
           {{end}}
+
+          {{if .ShowCodexGifs}}
+          <div class="gif-panel">
+            <div class="gif-panel-head">
+              <div class="gif-panel-thumb">{{if .CodexStatusImage}}<img src="{{.CodexStatusImage}}" alt="Codex GIF">{{end}}</div>
+              <div>
+                <div class="gif-panel-title">Codex</div>
+                <div class="gif-panel-sub">Shown for Codex sessions</div>
+              </div>
+            </div>
+            <label class="field">
+              GIF URL or asset key
+              <input type="text" name="codex_status_image" value="{{.CodexStatusImage}}" placeholder="/assets/gifs/codex-working.gif or https://...">
+            </label>
+            <div class="gif-gallery compact">
+              {{range .BuiltinCodexGifs}}
+                <div class="gif-tile {{if .Active}}active{{end}}">
+                  <img src="{{.Path}}" alt="{{.Label}}">
+                  <div class="g-name">{{.Label}}</div>
+                  <button type="submit" formaction="/settings/gif/pick" name="gif_pick" value="codex:{{.Path}}">{{if .Active}}Active{{else}}Use{{end}}</button>
+                </div>
+              {{end}}
+            </div>
+          </div>
+          {{end}}
         </div>
         {{end}}
 

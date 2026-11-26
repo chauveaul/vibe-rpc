@@ -287,6 +287,8 @@ func SessionFromState(st state.SessionState, now time.Time) SessionData {
 		src = "CLAUDE CODE"
 	} else if st.Source == "opencode" {
 		src = "OPENCODE"
+	} else if st.Source == "codex" {
+		src = "CODEX"
 	}
 	status := st.Status
 	if status == "" {

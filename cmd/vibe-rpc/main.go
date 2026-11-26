@@ -528,15 +528,27 @@ func main() {
 			}
 			agg := loadAggOrScan()
 			if cardPNG {
-				if kind != "card" {
-					return fmt.Errorf("--png is only supported for the stats card (vibe-rpc card --png)")
-				}
 				if cardScale < 1 || cardScale > 4 {
 					return fmt.Errorf("--scale must be between 1 and 4")
 				}
+				var defOut string
+				var wPx, hPx int
+				switch kind {
+				case "card":
+					defOut = "vibe-rpc-card.png"
+					wPx, hPx = int(card.Width*cardScale), int(card.Height*cardScale)
+				case "calendar", "heatmap":
+					defOut = "vibe-rpc-heatmap.png"
+					wPx, hPx = int(card.HeatmapWidth*cardScale), int(card.HeatmapHeight*cardScale)
+				case "session-card":
+					defOut = "vibe-rpc-session.png"
+					wPx, hPx = int(card.SessionWidth*cardScale), int(card.SessionHeight*cardScale)
+				default:
+					return fmt.Errorf("--png is supported for card, calendar/heatmap, and session-card")
+				}
 				out := cardOut
 				if out == "" {
-					out = "vibe-rpc-card.png"
+					out = defOut
 				} else if strings.EqualFold(filepath.Ext(out), ".svg") {
 					return fmt.Errorf("--png writes a PNG; use an --out path ending in .png")
 				}
@@ -544,7 +556,16 @@ func main() {
 				if err != nil {
 					return err
 				}
-				if err := card.WritePNG(f, card.FromAggregate(agg), cardScale); err != nil {
+				switch kind {
+				case "card":
+					err = card.WritePNG(f, card.FromAggregate(agg), cardScale)
+				case "calendar", "heatmap":
+					err = card.WriteHeatmapPNG(f, agg, time.Now(), cardScale)
+				case "session-card":
+					_, _, st := resolveLiveState()
+					err = card.WriteSessionPNG(f, card.SessionFromState(st, time.Now()), cardScale)
+				}
+				if err != nil {
 					f.Close()
 					return err
 				}
@@ -552,7 +573,7 @@ func main() {
 					return err
 				}
 				abs, _ := filepath.Abs(out)
-				fmt.Printf("Wrote %s (%dx%d)\n", abs, int(card.Width*cardScale), int(card.Height*cardScale))
+				fmt.Printf("Wrote %s (%dx%d)\n", abs, wPx, hPx)
 				return nil
 			}
 			var svg string
@@ -576,8 +597,8 @@ func main() {
 	}
 	statcardsCmd.Flags().StringVar(&cardMetric, "metric", "hours", "Badge metric: hours|tokens|streak|cost|sessions|lines")
 	statcardsCmd.Flags().StringVar(&cardOut, "out", "", "Write to file path (PNG defaults to ./vibe-rpc-card.png)")
-	statcardsCmd.Flags().BoolVar(&cardPNG, "png", false, "Render the stats card as a 1200×630 PNG for sharing on Discord, X or LinkedIn")
-	statcardsCmd.Flags().Float64Var(&cardScale, "scale", 2, "PNG pixel density: 1 = 1200×630, 2 = 2400×1260")
+	statcardsCmd.Flags().BoolVar(&cardPNG, "png", false, "Render card, calendar/heatmap, or session-card as a shareable PNG")
+	statcardsCmd.Flags().Float64Var(&cardScale, "scale", 2, "PNG pixel density (1x–4x, default 2x Retina)")
 
 	// statusline
 	var slTpl string

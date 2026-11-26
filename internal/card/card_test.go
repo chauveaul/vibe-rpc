@@ -5,8 +5,10 @@ import (
 	"image/png"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/chauveaul/vibe-rpc/internal/scanner"
+	"github.com/chauveaul/vibe-rpc/internal/state"
 )
 
 func TestRenderPNG(t *testing.T) {
@@ -40,5 +42,56 @@ func TestFromEmptyAggregate(t *testing.T) {
 	}
 	if _, err := PNG(d, 1); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRenderHeatmapPNG(t *testing.T) {
+	now := time.Date(2026, 11, 26, 22, 0, 0, 0, time.UTC)
+	agg := &scanner.Aggregate{
+		Sessions:      42,
+		Streak:        7,
+		LongestStreak: 14,
+		ByDay: map[string]*scanner.DayBucket{
+			now.Format("2006-01-02"):                  {ActiveMs: 3 * 3_600_000},
+			now.AddDate(0, 0, -1).Format("2006-01-02"): {ActiveMs: 90 * 60_000},
+		},
+	}
+	b, err := HeatmapPNG(agg, now, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	img, err := png.Decode(bytes.NewReader(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := img.Bounds().Size(); got.X != HeatmapWidth || got.Y != HeatmapHeight {
+		t.Fatalf("unexpected heatmap size %v", got)
+	}
+}
+
+func TestRenderSessionPNG(t *testing.T) {
+	now := time.Date(2026, 11, 26, 22, 0, 0, 0, time.UTC)
+	st := state.SessionState{
+		Source:       "antigravity",
+		Status:       "working",
+		Model:        "gemini-4-neon-high",
+		Cwd:          "/Users/meze/Documents/vibe-rpc",
+		CurrentTool:  "edit_file",
+		CurrentFile:  "extras.go",
+		SessionStart: now.Add(-42 * time.Minute).UnixMilli(),
+		Messages:     18,
+		Tools:        64,
+		Tokens:       state.Tokens{Input: 120_000, Output: 18_000},
+	}
+	b, err := SessionPNG(SessionFromState(st, now), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	img, err := png.Decode(bytes.NewReader(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := img.Bounds().Size(); got.X != SessionWidth || got.Y != SessionHeight {
+		t.Fatalf("unexpected session size %v", got)
 	}
 }

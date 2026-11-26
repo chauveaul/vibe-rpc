@@ -358,6 +358,10 @@ func PNG(d Data, scale float64) ([]byte, error) {
 }
 
 func (c *canvas) background() {
+	c.backgroundFor(Width, Height)
+}
+
+func (c *canvas) backgroundFor(designW, designH float64) {
 	b := c.img.Bounds()
 	W, H := float64(b.Dx()), float64(b.Dy())
 	// radial-gradient(120% 95% at 50% 0%, #15171c 0%, #0b0c0f 56%, #060709 100%)
@@ -393,9 +397,9 @@ func (c *canvas) background() {
 		}
 	}
 	// Dot field (48px grid), faded toward the edges like the dashboard's vignette.
-	for gy := 24.0; gy < Height; gy += 48 {
-		for gx := 24.0; gx < Width; gx += 48 {
-			v := math.Hypot((gx-Width/2)/(0.8*Width/2), (gy-Height*0.42)/(0.75*Height/2))
+	for gy := 24.0; gy < designH; gy += 48 {
+		for gx := 24.0; gx < designW; gx += 48 {
+			v := math.Hypot((gx-designW/2)/(0.8*designW/2), (gy-designH*0.42)/(0.75*designH/2))
 			a := 0.20 * math.Max(0, 1-math.Max(0, v-0.32)/0.68)
 			if a < 0.01 {
 				continue

@@ -78,7 +78,7 @@ func TestDashboardRendersQuotasAndAPIQuotas(t *testing.T) {
 		t.Fatalf("GET / = %d", rec.Code)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"Usage Quotas", "Goals &amp; Monthly Budget", "Gemini 5h", "Google AI Pro", "Daily hours", "$150"} {
+	for _, want := range []string{"Usage quotas", "Goals &amp; monthly budget", "Gemini 5h", "Google AI Pro", "Daily hours", "$150"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("dashboard HTML missing %q", want)
 		}

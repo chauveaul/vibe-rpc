@@ -115,7 +115,7 @@ func main() {
 
 	root := &cobra.Command{
 		Use:     "vibe-rpc",
-		Short:   "Discord Rich Presence & coding analytics for Antigravity + Claude Code (100% Go)",
+		Short:   "Discord Rich Presence & coding analytics for Antigravity, Claude Code, OpenCode and Codex",
 		Version: paths.Version,
 		// Print just the error, not the whole usage block, when a command fails.
 		SilenceUsage: true,
@@ -282,7 +282,7 @@ func main() {
 			return server.Serve(addr)
 		}
 	}
-	serveCmd := &cobra.Command{Use: "serve", Short: "Open the local zero-JS web dashboard", RunE: servePage("/")}
+	serveCmd := &cobra.Command{Use: "serve", Short: "Open the local web dashboard", RunE: servePage("/")}
 	serveCmd.Flags().BoolVar(&noOpen, "no-open", false, "Do not automatically open the browser")
 	serveCmd.Flags().IntVar(&portFlag, "port", 0, "Port to bind on 127.0.0.1 (default 47475)")
 
@@ -346,7 +346,7 @@ func main() {
 	var sourceFlag string
 	hookCmd := &cobra.Command{
 		Use:    "hook <event>",
-		Short:  "Internal hook entrypoint invoked by Antigravity or Claude Code",
+		Short:  "Internal hook entrypoint invoked by the coding agents",
 		Hidden: true,
 		Args:   cobra.MaximumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
@@ -829,7 +829,7 @@ func main() {
 	scanCmd := &cobra.Command{
 		Use:     "scan",
 		Aliases: []string{"rescan"},
-		Short:   "Scan Antigravity and Claude Code transcripts into the aggregate cache",
+		Short:   "Scan Antigravity, Claude Code, OpenCode and Codex transcripts into the aggregate cache",
 		Run: func(cmd *cobra.Command, args []string) {
 			res := scanner.Scan(scanner.ScanOptions{Force: forceScan || cmd.CalledAs() == "rescan"})
 			fmt.Printf("Scanned %d files (%d parsed, %d cached, %d pruned). Total sessions: %d\n",

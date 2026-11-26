@@ -44,7 +44,7 @@ type rpcError struct {
 var toolDefs = []map[string]any{
 	{
 		"name":        "get_lifetime_stats",
-		"description": "Return combined lifetime coding stats across Antigravity and Claude Code (hours, sessions, tokens, cost, streak, breakdown by source).",
+		"description": "Return combined lifetime coding stats across all tracked agents (hours, sessions, tokens, cost, streak, breakdown by source).",
 		"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}},
 	},
 	{

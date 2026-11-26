@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chauveaul/vibe-rpc/internal/config"
 	"github.com/chauveaul/vibe-rpc/internal/format"
 	"github.com/chauveaul/vibe-rpc/internal/pricing"
 	"github.com/chauveaul/vibe-rpc/internal/scanner"
@@ -150,16 +151,23 @@ func SummarizeRange(agg *scanner.Aggregate, rng string) RangeSummary {
 
 func GenerateInsights(agg *scanner.Aggregate) []string {
 	if agg == nil || agg.Sessions == 0 {
-		return []string{"Start coding with Antigravity or Claude Code to build your coding insights."}
+		return []string{"No sessions recorded yet. Start one, or run vibe-rpc scan to import past sessions."}
 	}
 	var out []string
 
-	// Multi-source insight
-	agy := agg.BySource["antigravity"]
-	cc := agg.BySource["claude"]
-	if agy != nil && cc != nil && agy.Sessions > 0 && cc.Sessions > 0 {
-		out = append(out, fmt.Sprintf("Dual-agent workflow: %d Antigravity sessions (%s) + %d Claude Code sessions (%s).",
-			agy.Sessions, format.FmtHours(agy.ActiveMs), cc.Sessions, format.FmtHours(cc.ActiveMs)))
+	// Multi-agent insight
+	var perAgent []string
+	for _, a := range format.ActiveAgents(agg) {
+		if s := agg.BySource[a]; s.Sessions > 0 {
+			perAgent = append(perAgent, fmt.Sprintf("%d %s sessions (%s)", s.Sessions, config.AgentName(a), format.FmtHours(s.ActiveMs)))
+		}
+	}
+	if len(perAgent) >= 2 {
+		label := "Dual-agent workflow"
+		if len(perAgent) > 2 {
+			label = "Multi-agent workflow"
+		}
+		out = append(out, label+": "+strings.Join(perAgent, " + ")+".")
 	}
 
 	// Peak hour
@@ -364,7 +372,7 @@ func BadgeSVG(agg *scanner.Aggregate, metric string) string {
 	if agg == nil {
 		agg = &scanner.Aggregate{}
 	}
-	label := "Antigravity"
+	label := "vibe-rpc"
 	val := format.FmtHours(agg.ActiveMs)
 	switch strings.ToLower(metric) {
 	case "tokens":
@@ -395,6 +403,18 @@ func BadgeSVG(agg *scanner.Aggregate, metric string) string {
 </svg>`, tw, html.EscapeString(label), html.EscapeString(val), tw, lw, vw, lw, lw/2, html.EscapeString(label), lw+vw/2, html.EscapeString(val))
 }
 
+// posterAgents is the poster footer's agent list, e.g. " · Claude Code + Codex".
+func posterAgents(agg *scanner.Aggregate) string {
+	var names []string
+	for _, a := range format.ActiveAgents(agg) {
+		names = append(names, config.AgentName(a))
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	return " · " + strings.Join(names, " + ")
+}
+
 func PosterCardSVG(agg *scanner.Aggregate) string {
 	if agg == nil {
 		agg = &scanner.Aggregate{}
@@ -419,7 +439,7 @@ func PosterCardSVG(agg *scanner.Aggregate) string {
     <text x="355" y="186" font-size="10.5" letter-spacing="1.2" fill="#5e626b">LINES ADDED</text>
     <text x="355" y="212" font-family="Inter,system-ui,sans-serif" font-size="22" font-weight="700" fill="#f5f5f7">+%s</text>
   </g>
-  <text x="28" y="256" font-family="JetBrains Mono,monospace" font-size="10.5" fill="#5e626b">github.com/chauveaul/vibe-rpc · Antigravity + Claude Code</text>
+  <text x="28" y="256" font-family="JetBrains Mono,monospace" font-size="10.5" fill="#5e626b">github.com/chauveaul/vibe-rpc%s</text>
 </svg>`,
 		html.EscapeString(format.FmtHours(agg.ActiveMs)),
 		agg.Sessions,
@@ -427,6 +447,7 @@ func PosterCardSVG(agg *scanner.Aggregate) string {
 		html.EscapeString(format.FmtNum(toks)),
 		html.EscapeString(pricing.FmtCost(agg.EstimatedCost)),
 		html.EscapeString(format.FmtNum(int64(agg.LinesAdded))),
+		html.EscapeString(posterAgents(agg)),
 	)
 }
 

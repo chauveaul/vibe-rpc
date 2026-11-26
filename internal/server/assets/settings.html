@@ -30,7 +30,7 @@
       </div>
     </header>
 
-    {{if .Saved}}<div class="banner ok">Saved to {{.ConfigPath}} — daemon picks up changes automatically.</div>{{end}}
+    {{if .Saved}}<div class="banner ok">Saved to {{.ConfigPath}}. The daemon picks up changes automatically.</div>{{end}}
     {{if .Error}}<div class="banner err">{{.Error}}</div>{{end}}
     {{if .Notice}}<div class="banner ok">{{.Notice}}</div>{{end}}
 
@@ -81,7 +81,7 @@
       <!-- Card / Presence template editor -->
       <section class="set-card">
         <div class="set-head">
-          <h2>Discord Card</h2>
+          <h2>Discord card</h2>
           <span class="set-hint">Customize text and art per status</span>
         </div>
 
@@ -138,7 +138,7 @@
           {{else}}
           <div class="field">
             <span>Discord GIFs for "{{.Status}}"</span>
-            <span class="set-hint">Configure Antigravity &amp; Claude Code GIFs side-by-side below.</span>
+            <span class="set-hint">Pick a GIF for each agent below.</span>
           </div>
           {{end}}
         </div>
@@ -146,7 +146,7 @@
         {{if eq .Status "dual"}}
         <div class="sub-head">
           <h3>Dual Wielding Discord GIF</h3>
-          <span class="set-hint">Shown when Antigravity &amp; Claude Code are both working simultaneously</span>
+          <span class="set-hint">Shown while Antigravity and Claude Code are both working</span>
         </div>
         <div class="gif-gallery">
           {{range .DualGifs}}
@@ -295,8 +295,8 @@
       <!-- Discord & Agent Sources -->
       <section class="set-card">
         <div class="set-head">
-          <h2>Discord &amp; Agent Sources</h2>
-          <span class="set-hint">Application identity and multi-agent merging</span>
+          <h2>Discord &amp; agents</h2>
+          <span class="set-hint">App name and ID, tracked agents, profile buttons</span>
         </div>
 
         <div class="grid2">
@@ -412,8 +412,8 @@
       <!-- Goals & Budget -->
       <section class="set-card">
         <div class="set-head">
-          <h2>Goals &amp; Budget</h2>
-          <span class="set-hint">Powers <code class="code-chip">&#123;goalLabel&#125;</code> and <code class="code-chip">&#123;budgetLabel&#125;</code> in your card</span>
+          <h2>Goals &amp; budget</h2>
+          <span class="set-hint">Fills in <code class="code-chip">&#123;goalLabel&#125;</code> and <code class="code-chip">&#123;budgetLabel&#125;</code> in your card</span>
         </div>
         <div class="grid3">
           <label class="field">
@@ -437,7 +437,7 @@
 
         <div class="sub-head">
           <h3>Monthly spend</h3>
-          <span class="set-hint">Estimated API-equivalent cost across Antigravity &amp; Claude Code</span>
+          <span class="set-hint">Estimated API-equivalent cost across all tracked agents</span>
         </div>
         <div class="grid3">
           <label class="field">
@@ -500,7 +500,7 @@
       <!-- Triggers -->
       <section class="set-card">
         <div class="set-head">
-          <h2>Command Triggers</h2>
+          <h2>Command triggers</h2>
           <span class="set-hint">Swap in a custom card when the agent runs a matching shell command</span>
         </div>
         <label class="field narrow">
@@ -595,7 +595,7 @@
     <!-- Per-workspace Privacy -->
     <section class="set-card">
       <div class="set-head">
-        <h2>Workspace Privacy</h2>
+        <h2>Workspace privacy</h2>
         <span class="set-hint">Control what Discord shows for each repository</span>
       </div>
       {{range .Workspaces}}
@@ -629,13 +629,12 @@
           </div>
         </div>
       {{else}}
-        <div class="set-hint">No workspaces recorded yet. Run a session in Antigravity or Claude Code first.</div>
+        <div class="set-hint">No workspaces recorded yet. Run a session in {{.AgentsOr}} first.</div>
       {{end}}
     </section>
 
     <footer>
       <span>Config: {{.ConfigPath}}</span>
-      <span>Go SSR · Progressive Enhancement</span>
     </footer>
   </div>
   <script type="application/json" id="pv-vars">{{.PreviewVarsJSON}}</script>

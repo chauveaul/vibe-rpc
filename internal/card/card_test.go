@@ -14,10 +14,10 @@ import (
 func TestRenderPNG(t *testing.T) {
 	d := Data{
 		Hours: "128h", Subline: "412 sessions · 3.1k prompts", Since: "SINCE MAR 2026",
-		AgyMs: 80 * 3_600_000, ClaudeMs: 48 * 3_600_000,
+		Agents: []AgentHours{{"Antigravity", 80 * 3_600_000}, {"Claude Code", 48 * 3_600_000}, {"OpenCode", 9 * 3_600_000}, {"Codex", 31 * 3_600_000}},
 		Stats: []Stat{{"Tokens", "1.2B"}, {"API equiv", "$4,812"}, {"Best streak", "23 days"},
 			{"Lines added", "+184k"}, {"Ships", "312"}, {"Top model", "Claude Opus 4.6"}},
-		FooterLeft: "github.com/chauveaul/vibe-rpc", FooterRight: "ANTIGRAVITY + CLAUDE CODE",
+		FooterLeft: "github.com/chauveaul/vibe-rpc", FooterRight: "ANTIGRAVITY + CLAUDE CODE + OPENCODE + CODEX",
 	}
 	b, err := PNG(d, 2)
 	if err != nil {

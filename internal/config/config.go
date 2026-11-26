@@ -50,6 +50,22 @@ func AgentName(key string) string {
 	return "Antigravity"
 }
 
+// JoinAgentNames lists agents' display names as prose: "A", "A or B",
+// "A, B or C" (conj is "or" / "and"). Empty when keys is empty.
+func JoinAgentNames(keys []string, conj string) string {
+	names := make([]string, len(keys))
+	for i, k := range keys {
+		names[i] = AgentName(k)
+	}
+	switch len(names) {
+	case 0:
+		return ""
+	case 1:
+		return names[0]
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " " + conj + " " + names[len(names)-1]
+}
+
 // Tracks reports whether vibe-rpc records an agent at all (stats, dashboard,
 // notch). Unknown sources fall under Antigravity, the original default.
 func (s SourcesConfig) Tracks(agent string) bool {

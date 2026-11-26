@@ -174,7 +174,7 @@ func BuildNotchFeed() NotchFeed {
 		f.AppName, f.Details, f.State = act.Name, act.Details, act.State
 	} else {
 		f.Details = "Away — no active session"
-		f.State = "Open Antigravity or Claude Code to start tracking"
+		f.State = "Open " + agentsOr(cfg) + " to start tracking"
 	}
 
 	img := presence.ResolveLargeImageKeyForSource(cfg, st.Source, st.Status, st.Model)

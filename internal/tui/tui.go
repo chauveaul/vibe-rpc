@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"math"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -14,8 +15,11 @@ import (
 	"github.com/chauveaul/vibe-rpc/internal/config"
 	"github.com/chauveaul/vibe-rpc/internal/daemon"
 	"github.com/chauveaul/vibe-rpc/internal/format"
+	"github.com/chauveaul/vibe-rpc/internal/limits"
+	"github.com/chauveaul/vibe-rpc/internal/pause"
 	"github.com/chauveaul/vibe-rpc/internal/presence"
 	"github.com/chauveaul/vibe-rpc/internal/pricing"
+	"github.com/chauveaul/vibe-rpc/internal/privacy"
 	"github.com/chauveaul/vibe-rpc/internal/proc"
 	"github.com/chauveaul/vibe-rpc/internal/scanner"
 	"github.com/chauveaul/vibe-rpc/internal/state"
@@ -25,30 +29,35 @@ import (
 var tabs = []string{"Now", "Today", "Week", "Streak", "Lifetime", "Cost", "Code"}
 
 var (
-	styleBrand = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#ffffff")).Background(lipgloss.Color("#4285f4")).Padding(0, 1)
-	styleTab   = lipgloss.NewStyle().Foreground(lipgloss.Color("#8a97b0")).Padding(0, 1)
-	styleTabOn = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#ffffff")).Background(lipgloss.Color("#537fc4")).Padding(0, 1)
-	styleCard  = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#537fc4")).Padding(1, 2)
-	styleTitle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#8ab4f8"))
-	styleVal   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#f3f6fc"))
-	styleMute  = lipgloss.NewStyle().Foreground(lipgloss.Color("#8a97b0"))
-	styleGood  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#34a853"))
-	styleWarn  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#fbbc05"))
+	styleBrand = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#0b0c10")).Background(lipgloss.Color("#f5f5f7")).Padding(0, 1)
+	styleTab   = lipgloss.NewStyle().Foreground(lipgloss.Color("#8c9099")).Padding(0, 1)
+	styleTabOn = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#0b0c10")).Background(lipgloss.Color("#e5e7eb")).Padding(0, 1)
+	styleCard  = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#3f424a")).Padding(1, 2)
+	styleTitle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#d1d5db"))
+	styleVal   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#ffffff"))
+	styleMute  = lipgloss.NewStyle().Foreground(lipgloss.Color("#8c9099"))
+	styleGood  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#4ade80"))
+	styleWarn  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#facc15"))
+	styleCrit  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#f87171"))
 )
 
 type tickMsg time.Time
 
 type model struct {
-	tab    int
-	width  int
-	height int
-	cfg    config.Config
-	agg    *scanner.Aggregate
-	st     state.SessionState
-	pid    int
+	tab        int
+	width      int
+	height     int
+	cfg        config.Config
+	agg        *scanner.Aggregate
+	st         state.SessionState
+	pid        int
+	pausedTill time.Time
+	ccLimits   *limits.Claude
+	agyLimits  *limits.Antigravity
+	flash      string
 }
 
-func loadSnapshot() (config.Config, *scanner.Aggregate, state.SessionState, int) {
+func loadSnapshot() (config.Config, *scanner.Aggregate, state.SessionState, int, time.Time, *limits.Claude, *limits.Antigravity) {
 	cfg := config.Load()
 	agg := scanner.ReadAggregate()
 	if agg == nil {
@@ -85,12 +94,17 @@ func loadSnapshot() (config.Config, *scanner.Aggregate, state.SessionState, int)
 	if presence.IsDualWorking(st) {
 		st.Status = "dual"
 	}
-	return cfg, agg, st, daemon.AlivePID()
+	return cfg, agg, st, daemon.AlivePID(), pause.Until(""), limits.Load(), limits.LoadAntigravity()
+}
+
+func (m *model) reload() {
+	m.cfg, m.agg, m.st, m.pid, m.pausedTill, m.ccLimits, m.agyLimits = loadSnapshot()
 }
 
 func newModel() model {
-	cfg, agg, st, pid := loadSnapshot()
-	return model{width: 92, height: 28, cfg: cfg, agg: agg, st: st, pid: pid}
+	m := model{width: 92, height: 32}
+	m.reload()
+	return m
 }
 
 func tickCmd() tea.Cmd {
@@ -101,13 +115,22 @@ func (m model) Init() tea.Cmd {
 	return tickCmd()
 }
 
+func (m model) activeProjectCwd() string {
+	if m.st.Cwd != "" {
+		return m.st.Cwd
+	}
+	cwd, _ := os.Getwd()
+	return cwd
+}
+
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
 	case tickMsg:
-		m.cfg, m.agg, m.st, m.pid = loadSnapshot()
+		m.reload()
+		m.flash = ""
 		return m, tickCmd()
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -122,8 +145,32 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if idx >= 0 && idx < len(tabs) {
 				m.tab = idx
 			}
+		case "p":
+			if !pause.Until("").IsZero() {
+				pause.Clear("")
+				m.pausedTill = time.Time{}
+				m.flash = "Discord presence resumed"
+			} else if until, err := pause.Set(30*time.Minute, ""); err == nil {
+				m.pausedTill = until
+				m.flash = "Paused Discord presence until " + until.Format(time.Kitchen)
+			}
+		case "v":
+			if cwd := m.activeProjectCwd(); cwd != "" {
+				cur := privacy.Resolve(cwd, m.cfg).Visibility
+				next := "name-only"
+				switch cur {
+				case "name-only":
+					next = "hidden"
+				case "hidden":
+					next = "public"
+				}
+				if _, err := privacy.SetCwdVisibility(cwd, next); err == nil {
+					m.flash = fmt.Sprintf("Privacy for %s → %s", filepath.Base(cwd), next)
+				}
+			}
 		case "r":
-			m.cfg, m.agg, m.st, m.pid = loadSnapshot()
+			m.reload()
+			m.flash = "Refreshed"
 		}
 	}
 	return m, nil
@@ -143,6 +190,56 @@ func bar(val, maxVal float64, width int) string {
 	return strings.Repeat("█", n) + strings.Repeat("░", width-n)
 }
 
+func styledPctBar(pct float64, width int) string {
+	b := bar(pct, 100, width)
+	switch {
+	case pct >= 95:
+		return styleCrit.Render(b)
+	case pct >= 80:
+		return styleWarn.Render(b)
+	default:
+		return styleVal.Render(b)
+	}
+}
+
+func formatResetShort(resetsAt int64, isWeek bool, now time.Time) string {
+	if resetsAt <= 0 {
+		return ""
+	}
+	t := time.Unix(resetsAt, 0)
+	if !t.After(now) {
+		return "resetting"
+	}
+	if isWeek {
+		if t.In(now.Location()).Format("2006-01-02") == now.Format("2006-01-02") {
+			return "resets " + t.In(now.Location()).Format("15:04")
+		}
+		return "resets " + t.In(now.Location()).Format("Mon 15:04")
+	}
+	d := t.Sub(now)
+	h := int(d.Hours())
+	m := int(d.Minutes()) % 60
+	if h > 0 {
+		return fmt.Sprintf("resets in %dh %dm", h, m)
+	}
+	return fmt.Sprintf("resets in %dm", m)
+}
+
+func renderQuotaLine(label string, w *limits.Window, isWeek bool, now time.Time) string {
+	if w == nil {
+		return fmt.Sprintf("  %-12s %s  %4s", label, styleMute.Render(strings.Repeat("░", 20)), "—")
+	}
+	if w.Expired(now) {
+		return fmt.Sprintf("  %-12s %s  %4s  %s", label, styleMute.Render(strings.Repeat("░", 20)), "0%", styleMute.Render("fresh"))
+	}
+	pct := math.Max(0, math.Min(100, w.UsedPct))
+	reset := formatResetShort(w.ResetsAt, isWeek, now)
+	if reset != "" {
+		reset = "  " + styleMute.Render(reset)
+	}
+	return fmt.Sprintf("  %-12s %s  %3.0f%%%s", label, styledPctBar(pct, 20), pct, reset)
+}
+
 func (m model) View() string {
 	var b strings.Builder
 
@@ -151,7 +248,11 @@ func (m model) View() string {
 	if m.pid > 0 {
 		dBadge = styleGood.Render(fmt.Sprintf("● daemon pid %d", m.pid))
 	}
-	b.WriteString(styleBrand.Render(" vibe-rpc ") + "  " + dBadge + "\n\n")
+	header := styleBrand.Render(" vibe-rpc ") + "  " + dBadge
+	if !m.pausedTill.IsZero() {
+		header += "  " + styleWarn.Render("⏸ paused until "+m.pausedTill.Format(time.Kitchen))
+	}
+	b.WriteString(header + "\n\n")
 
 	// Tab strip
 	var tabParts []string
@@ -167,8 +268,8 @@ func (m model) View() string {
 
 	// Body
 	w := m.width - 6
-	if w < 54 {
-		w = 54
+	if w < 56 {
+		w = 56
 	}
 	if w > 96 {
 		w = 96
@@ -192,7 +293,11 @@ func (m model) View() string {
 		b.WriteString(card.Render(m.viewCode()))
 	}
 
-	b.WriteString("\n\n" + styleMute.Render("  ←/→ or 1-7 switch tabs · r refresh · q quit"))
+	foot := "  ←/→ or 1-7 tabs · p pause 30m · v privacy · r refresh · q quit"
+	if m.flash != "" {
+		b.WriteString("\n\n  " + styleGood.Render("✓ "+m.flash))
+	}
+	b.WriteString("\n\n" + styleMute.Render(foot))
 	return b.String()
 }
 
@@ -200,25 +305,55 @@ func (m model) viewNow() string {
 	vars := format.BuildVars(m.st, m.cfg, m.agg)
 	cursor := &presence.RotationCursor{}
 	act, cleared := daemon.BuildActivity(m.st, m.cfg, m.agg, cursor)
+	vis := privacy.Resolve(m.activeProjectCwd(), m.cfg).Visibility
 
 	var lines []string
 	lines = append(lines, styleTitle.Render("LIVE PRESENCE"))
 	lines = append(lines, fmt.Sprintf("  Agent   : %s  (%s)", styleVal.Render(fmt.Sprint(vars["sourcePretty"])), m.st.Status))
-	lines = append(lines, fmt.Sprintf("  Project : %s", styleVal.Render(fmt.Sprint(vars["project"]))))
+	lines = append(lines, fmt.Sprintf("  Project : %s  %s", styleVal.Render(fmt.Sprint(vars["project"])), styleMute.Render("["+vis+"]")))
 	lines = append(lines, fmt.Sprintf("  Model   : %s", styleVal.Render(fmt.Sprint(vars["modelPretty"]))))
 	if m.st.CurrentTool != "" {
 		lines = append(lines, fmt.Sprintf("  Tool    : %s  %s", styleVal.Render(format.HumanTool(m.st.CurrentTool)), styleMute.Render(m.st.CurrentFile)))
 	}
 	lines = append(lines, fmt.Sprintf("  Session : %s · %s · %s",
 		fmt.Sprint(vars["duration"]), fmt.Sprint(vars["messagesLabel"]), fmt.Sprint(vars["toolsLabel"])))
-	lines = append(lines, "")
-	lines = append(lines, styleTitle.Render("DISCORD CARD"))
+
+	lines = append(lines, "", styleTitle.Render("DISCORD CARD"))
 	if cleared || act == nil {
 		lines = append(lines, styleMute.Render("  (Hidden / paused — no activity sent to Discord)"))
 	} else {
 		lines = append(lines, fmt.Sprintf("  App     : %s", styleVal.Render(act.Name)))
 		lines = append(lines, fmt.Sprintf("  Line 1  : %s", act.Details))
 		lines = append(lines, fmt.Sprintf("  Line 2  : %s", act.State))
+	}
+
+	now := time.Now()
+	lines = append(lines, "", styleTitle.Render("USAGE QUOTAS"))
+	hasAnyQuota := false
+	if m.ccLimits != nil && (m.ccLimits.FiveHour != nil || m.ccLimits.SevenDay != nil) {
+		hasAnyQuota = true
+		lines = append(lines, renderQuotaLine("Claude 5h", m.ccLimits.FiveHour, false, now))
+		lines = append(lines, renderQuotaLine("Claude 7d", m.ccLimits.SevenDay, true, now))
+	}
+	if m.agyLimits != nil {
+		agyModel := ""
+		if m.st.AgySession != nil && m.st.AgySession.Model != "" {
+			agyModel = m.st.AgySession.Model
+		} else if m.st.Source != "claude" {
+			agyModel = m.st.Model
+		}
+		if pool, s, w := m.agyLimits.PickPool(agyModel); s != nil || w != nil {
+			hasAnyQuota = true
+			prefix := "Agy"
+			if pool == "3p" {
+				prefix = "Agy 3P"
+			}
+			lines = append(lines, renderQuotaLine(prefix+" 5h", s, false, now))
+			lines = append(lines, renderQuotaLine(prefix+" 7d", w, true, now))
+		}
+	}
+	if !hasAnyQuota {
+		lines = append(lines, styleMute.Render("  Enable usage limits in `vibe-rpc settings` for live 5h & 7d quota bars."))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -239,6 +374,39 @@ func (m model) viewToday() string {
 		fmt.Sprintf("  Tokens      : %s", styleVal.Render(format.FmtNum(tok))),
 		fmt.Sprintf("  API equiv   : %s", styleGood.Render(pricing.FmtCost(d.Cost))),
 		fmt.Sprintf("  Code churn  : +%d / -%d lines   ·  %d ships", d.LinesAdded, d.LinesRemoved, d.Ships),
+	}
+
+	var goalLines []string
+	if m.cfg.Goals.DailyHours > 0 {
+		cur := float64(d.ActiveMs) / 3_600_000
+		pct := cur / m.cfg.Goals.DailyHours * 100
+		b := bar(cur, m.cfg.Goals.DailyHours, 20)
+		if pct >= 100 {
+			b = styleGood.Render(b)
+		}
+		goalLines = append(goalLines, fmt.Sprintf("  Daily hours   %s  %s / %gh (%.0f%%)", b, format.FmtHours(d.ActiveMs), m.cfg.Goals.DailyHours, pct))
+	}
+	if m.cfg.Goals.DailyPrompts > 0 {
+		pct := float64(d.UserMessages) / float64(m.cfg.Goals.DailyPrompts) * 100
+		b := bar(float64(d.UserMessages), float64(m.cfg.Goals.DailyPrompts), 20)
+		if pct >= 100 {
+			b = styleGood.Render(b)
+		}
+		goalLines = append(goalLines, fmt.Sprintf("  Daily prompts %s  %d / %d (%.0f%%)", b, d.UserMessages, m.cfg.Goals.DailyPrompts, pct))
+	}
+	if m.cfg.Goals.WeeklyHours > 0 {
+		week := stats.SummarizeRange(m.agg, "7d")
+		cur := float64(week.ActiveMs) / 3_600_000
+		pct := cur / m.cfg.Goals.WeeklyHours * 100
+		b := bar(cur, m.cfg.Goals.WeeklyHours, 20)
+		if pct >= 100 {
+			b = styleGood.Render(b)
+		}
+		goalLines = append(goalLines, fmt.Sprintf("  Weekly hours  %s  %s / %gh (%.0f%%)", b, format.FmtHours(week.ActiveMs), m.cfg.Goals.WeeklyHours, pct))
+	}
+	if len(goalLines) > 0 {
+		lines = append(lines, "", styleTitle.Render("GOALS"))
+		lines = append(lines, goalLines...)
 	}
 	return strings.Join(lines, "\n")
 }
@@ -294,6 +462,10 @@ func (m model) viewLifetime() string {
 	if cc == nil {
 		cc = &scanner.SourceStats{}
 	}
+	var dualMs int64
+	for _, ms := range m.agg.DualByDay {
+		dualMs += ms
+	}
 	lines := []string{
 		styleTitle.Render("LIFETIME COMBINED"),
 		fmt.Sprintf("  Active time : %s  (%d sessions)", styleVal.Render(format.FmtHours(m.agg.ActiveMs)), m.agg.Sessions),
@@ -306,8 +478,23 @@ func (m model) viewLifetime() string {
 			agy.Sessions, format.FmtHours(agy.ActiveMs), format.FmtNum(agy.Tokens), pricing.FmtCost(agy.Cost)),
 		fmt.Sprintf("  Claude Code : %d sessions · %s · %s tokens · %s",
 			cc.Sessions, format.FmtHours(cc.ActiveMs), format.FmtNum(cc.Tokens), pricing.FmtCost(cc.Cost)),
+		fmt.Sprintf("  Dual wield  : %s running both agents simultaneously", styleVal.Render(format.FmtHours(dualMs))),
 	}
 	return strings.Join(lines, "\n")
+}
+
+func monthSpend(agg *scanner.Aggregate) float64 {
+	if agg == nil {
+		return 0
+	}
+	prefix := time.Now().Format("2006-01")
+	var total float64
+	for day, b := range agg.ByDay {
+		if strings.HasPrefix(day, prefix) && b != nil {
+			total += b.Cost
+		}
+	}
+	return total
 }
 
 func (m model) viewCost() string {
@@ -316,15 +503,24 @@ func (m model) viewCost() string {
 	}
 	if len(m.agg.ModelSplit) == 0 {
 		lines = append(lines, styleMute.Render("  No model usage recorded yet. Run `vibe-rpc scan`."))
-		return strings.Join(lines, "\n")
-	}
-	maxCost := m.agg.ModelSplit[0].Cost
-	for i, ms := range m.agg.ModelSplit {
-		if i >= 8 {
-			break
+	} else {
+		maxCost := m.agg.ModelSplit[0].Cost
+		for i, ms := range m.agg.ModelSplit {
+			if i >= 8 {
+				break
+			}
+			lines = append(lines, fmt.Sprintf("  %-18s %s  %8s (%2.0f%%)",
+				format.HumanModel(ms.Model), bar(ms.Cost, maxCost, 20), pricing.FmtCost(ms.Cost), ms.CostPct*100))
 		}
-		lines = append(lines, fmt.Sprintf("  %-18s %s  %8s (%2.0f%%)",
-			format.HumanModel(ms.Model), bar(ms.Cost, maxCost, 20), pricing.FmtCost(ms.Cost), ms.CostPct*100))
+	}
+	mtd := monthSpend(m.agg)
+	lines = append(lines, "", styleTitle.Render("MONTHLY BUDGET"))
+	if m.cfg.Budget.Monthly > 0 {
+		pct := mtd / m.cfg.Budget.Monthly * 100
+		lines = append(lines, fmt.Sprintf("  This month : %s  %s / $%.0f (%.0f%%)",
+			styledPctBar(pct, 20), pricing.FmtCost(mtd), m.cfg.Budget.Monthly, pct))
+	} else {
+		lines = append(lines, fmt.Sprintf("  This month : %s  %s", styleVal.Render(pricing.FmtCost(mtd)), styleMute.Render("(set a monthly budget in `vibe-rpc settings`)")))
 	}
 	return strings.Join(lines, "\n")
 }

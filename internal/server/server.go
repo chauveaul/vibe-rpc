@@ -24,6 +24,7 @@ import (
 	"github.com/chauveaul/vibe-rpc/internal/doctor"
 	"github.com/chauveaul/vibe-rpc/internal/format"
 	"github.com/chauveaul/vibe-rpc/internal/install"
+	"github.com/chauveaul/vibe-rpc/internal/limits"
 	"github.com/chauveaul/vibe-rpc/internal/notch"
 	"github.com/chauveaul/vibe-rpc/internal/notify"
 	"github.com/chauveaul/vibe-rpc/internal/paths"
@@ -243,6 +244,7 @@ func NewHandler() http.Handler {
 	mux.HandleFunc("GET /api/state", guard(handleAPIState))
 	mux.HandleFunc("GET /api/aggregate", guard(handleAPIAggregate))
 	mux.HandleFunc("GET /api/insights", guard(handleAPIInsights))
+	mux.HandleFunc("GET /api/quotas", guard(handleAPIQuotas))
 	mux.HandleFunc("GET /api/badge.svg", guard(handleAPIBadge))
 	mux.HandleFunc("GET /api/card.svg", guard(handleAPICard))
 	mux.HandleFunc("GET /api/card.png", guard(handleAPICardPNG))
@@ -653,6 +655,12 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cmp := buildCompare(agg, rng)
+	quotas := buildDashboardQuotas(
+		cfg, agg,
+		limits.Load(), install.ClaudeStatusLineState(""),
+		limits.LoadAntigravity(), install.AgyStatusLineState(""),
+		time.Now(),
+	)
 
 	data := map[string]any{
 		"Version":          paths.Version,
@@ -686,6 +694,7 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 		"LongestStreak":    agg.LongestStreak,
 		"DaysSinceFirst":   agg.DaysSinceFirst,
 		"Compare":          cmp,
+		"Quotas":           quotas,
 		"Running":          listRunning(cfg, st.SessionID),
 		"Heatmap":          heat,
 		"Models":           models,

@@ -127,6 +127,84 @@
       </div>
     </div>
 
+    <div class="split-row quota-row">
+      <div class="card">
+        <div class="card-h">
+          <h3>Usage Quotas</h3>
+          <span class="meta">{{if .Quotas.AgyPlan}}{{.Quotas.AgyPlan}} · {{end}}<a href="/settings">Configure →</a></span>
+        </div>
+        <div class="quota-groups">
+          <div class="quota-group">
+            <div class="quota-sub">Claude Code</div>
+            {{if .Quotas.ClaudeBars}}
+              {{range .Quotas.ClaudeBars}}
+                <div class="q-row">
+                  <span class="q-label">{{.Label}}</span>
+                  <span class="q-track"><span class="q-fill {{.Level}}" style="width:{{.Pct}}%"></span></span>
+                  <span class="q-val num">{{.Value}}</span>
+                  <span class="q-reset">{{.Reset}}</span>
+                </div>
+              {{end}}
+            {{else}}
+              <div class="q-hint">{{.Quotas.ClaudeHint}}</div>
+            {{end}}
+          </div>
+          <div class="quota-group">
+            <div class="quota-sub">Antigravity</div>
+            {{range .Quotas.AgyBars}}
+              <div class="q-row">
+                <span class="q-label">{{.Label}}</span>
+                <span class="q-track"><span class="q-fill agy {{.Level}}" style="width:{{.Pct}}%"></span></span>
+                <span class="q-val num">{{.Value}}</span>
+                <span class="q-reset">{{.Reset}}</span>
+              </div>
+            {{end}}
+            {{if .Quotas.AgyHint}}
+              <div class="q-hint">{{.Quotas.AgyHint}}</div>
+            {{end}}
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h">
+          <h3>Goals &amp; Monthly Budget</h3>
+          <span class="meta"><a href="/settings">Edit in Settings →</a></span>
+        </div>
+        <div class="goal-stack">
+          {{if .Quotas.Goals}}
+            {{range .Quotas.Goals}}
+              <div class="goal-item">
+                <div class="goal-head">
+                  <span class="goal-name">{{.Label}}</span>
+                  <span class="goal-detail num{{if .Met}} met{{end}}">{{.Detail}} · {{.Pct}}%{{if .Met}} ✓{{end}}</span>
+                </div>
+                <div class="q-track"><span class="q-fill{{if .Met}} done{{end}}" style="width:{{.Bar}}%"></span></div>
+              </div>
+            {{end}}
+          {{else}}
+            <div class="q-hint">No daily or weekly coding goals set yet.</div>
+          {{end}}
+
+          <div class="budget-block">
+            <div class="goal-head">
+              <span class="goal-name">Monthly spend</span>
+              {{if .Quotas.HasBudget}}
+                <span class="goal-detail num {{.Quotas.BudgetLevel}}">{{.Quotas.BudgetMTD}} / {{.Quotas.BudgetCap}} · {{.Quotas.BudgetPct}}%</span>
+              {{else}}
+                <span class="goal-detail num">{{.Quotas.BudgetMTD}} this month</span>
+              {{end}}
+            </div>
+            {{if .Quotas.HasBudget}}
+              <div class="q-track"><span class="q-fill {{if eq .Quotas.BudgetLevel "over"}}crit{{else if eq .Quotas.BudgetLevel "warn"}}warn{{end}}" style="width:{{.Quotas.BudgetBar}}%"></span></div>
+            {{else}}
+              <div class="q-hint">Set a monthly spend cap in Settings to track budget usage.</div>
+            {{end}}
+          </div>
+        </div>
+      </div>
+    </div>
+
     <section aria-labelledby="vs-h">
       <div class="section-head">
         <h2 id="vs-h">Antigravity vs Claude Code</h2>

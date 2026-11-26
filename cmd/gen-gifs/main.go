@@ -59,7 +59,6 @@ func screenGlow(base, glow rgb, strength float64) rgb {
 	}
 }
 
-// Signed distance to a line segment AB from point P.
 func sdSegment(px, py, ax, ay, bx, by float64) float64 {
 	pax, pay := px-ax, py-ay
 	bax, bay := bx-ax, by-ay
@@ -71,7 +70,6 @@ func sdSegment(px, py, ax, ay, bx, by float64) float64 {
 	return math.Hypot(pax-bax*h, pay-bay*h)
 }
 
-// Signed distance to a rounded box centered at origin.
 func sdRoundedBox(px, py, bx, by, r float64) float64 {
 	qx := math.Abs(px) - bx + r
 	qy := math.Abs(py) - by + r
@@ -83,30 +81,64 @@ func smoothstep(edge0, edge1, x float64) float64 {
 	return t * t * (3 - 2*t)
 }
 
+// Signed distance to a sleek 8-ray geometric starburst emblem (Claude-inspired original emblem)
+func sdStarburst(px, py, cx, cy, outerR, thickness, rot float64) float64 {
+	best := 1e9
+	const rays = 8
+	for i := 0; i < rays; i++ {
+		a := rot + float64(i)*math.Pi/float64(rays)
+		dx := math.Cos(a) * outerR
+		dy := math.Sin(a) * outerR
+		d := sdSegment(px, py, cx-dx, cy-dy, cx+dx, cy+dy) - thickness
+		if d < best {
+			best = d
+		}
+	}
+	core := math.Hypot(px-cx, py-cy) - thickness*2.1
+	if core < best {
+		best = core
+	}
+	return best
+}
+
+// Signed distance to the sleek hollow Antigravity 'A' prism
+func sdAntigravityA(px, py, cx, ay, scale float64) float64 {
+	apexX, apexY := cx, ay-54*scale
+	leftX, leftY := cx-45*scale, ay+44*scale
+	rightX, rightY := cx+45*scale, ay+44*scale
+	archLX, archLY := cx-23*scale, ay+24*scale
+	archMX, archMY := cx, ay+14*scale
+	archRX, archRY := cx+23*scale, ay+24*scale
+
+	dLeft := sdSegment(px, py, apexX, apexY, leftX, leftY)
+	dRight := sdSegment(px, py, apexX, apexY, rightX, rightY)
+	dArch1 := sdSegment(px, py, archLX, archLY, archMX, archMY)
+	dArch2 := sdSegment(px, py, archMX, archMY, archRX, archRY)
+	return math.Min(math.Min(dLeft, dRight)-10.5*scale, math.Min(dArch1, dArch2)-6.8*scale)
+}
+
 type themeSpec struct {
 	name      string
+	kind      string // "antigravity", "claude", "dual"
 	bgTop     rgb
 	bgBot     rgb
 	accentA   rgb
 	accentB   rgb
 	badge     rgb
 	mode      string
-	delayCS   int // centiseconds per frame
+	delayCS   int
 	bobAmp    float64
 	orbitSpd  float64
 	starAlpha float64
 }
 
 func buildPalette(spec themeSpec) color.Palette {
-	// 256-color smooth palette tailored to this status theme (dark slate + accents + whites)
 	pal := make(color.Palette, 0, 256)
-	// 32 background-to-surface dark slate tones
 	for i := 0; i < 32; i++ {
 		t := float64(i) / 31.0
 		c := lerpColor(rgb{10, 12, 18}, rgb{46, 52, 70}, t)
 		pal = append(pal, color.RGBA{uint8(c.r), uint8(c.g), uint8(c.b), 255})
 	}
-	// 48 accentA ramp (dark -> accentA -> bright white)
 	for i := 0; i < 48; i++ {
 		t := float64(i) / 47.0
 		var c rgb
@@ -117,7 +149,6 @@ func buildPalette(spec themeSpec) color.Palette {
 		}
 		pal = append(pal, color.RGBA{uint8(c.r), uint8(c.g), uint8(c.b), 255})
 	}
-	// 48 accentB ramp
 	for i := 0; i < 48; i++ {
 		t := float64(i) / 47.0
 		var c rgb
@@ -128,7 +159,6 @@ func buildPalette(spec themeSpec) color.Palette {
 		}
 		pal = append(pal, color.RGBA{uint8(c.r), uint8(c.g), uint8(c.b), 255})
 	}
-	// 48 blend accentA <-> accentB across brightnesses
 	for i := 0; i < 48; i++ {
 		u := float64(i%8) / 7.0
 		v := float64(i/8) / 5.0
@@ -136,7 +166,6 @@ func buildPalette(spec themeSpec) color.Palette {
 		c := lerpColor(spec.bgTop, lerpColor(mid, rgb{255, 255, 255}, 0.25), 0.2+0.8*v)
 		pal = append(pal, color.RGBA{uint8(c.r), uint8(c.g), uint8(c.b), 255})
 	}
-	// 40 badge color ramp
 	for i := 0; i < 40; i++ {
 		t := float64(i) / 39.0
 		var c rgb
@@ -147,7 +176,6 @@ func buildPalette(spec themeSpec) color.Palette {
 		}
 		pal = append(pal, color.RGBA{uint8(c.r), uint8(c.g), uint8(c.b), 255})
 	}
-	// 40 neutral grayscale / white highlights
 	for i := 0; i < 40; i++ {
 		t := float64(i) / 39.0
 		c := lerpColor(rgb{40, 45, 58}, rgb{253, 254, 255}, t)
@@ -164,10 +192,9 @@ func renderFrame(spec themeSpec, frame int, pal color.Palette) *image.Paletted {
 	cx, cy := float64(size)/2.0, float64(size)/2.0
 	bobY := math.Sin(theta) * spec.bobAmp
 	if spec.mode == "shipped" {
-		bobY = -math.Abs(math.Sin(theta))*11.0 + 3.0
+		bobY = -math.Abs(math.Sin(theta))*10.0 + 3.0
 	}
 
-	// Deterministic subtle background stars
 	type star struct{ x, y, r, ph float64 }
 	stars := []star{
 		{38, 42, 1.8, 0.2}, {214, 52, 2.0, 1.5}, {52, 206, 1.6, 2.7},
@@ -175,13 +202,23 @@ func renderFrame(spec themeSpec, frame int, pal color.Palette) *image.Paletted {
 		{226, 128, 1.7, 0.9}, {96, 30, 1.3, 2.1}, {158, 224, 1.5, 4.8},
 	}
 
-	// Precompute orbiting particles
 	type orb struct {
 		x, y, rad float64
 		col       rgb
 	}
 	var orbs []orb
 	switch spec.mode {
+	case "dual":
+		for i := 0; i < 4; i++ {
+			a := theta + float64(i)*math.Pi/2
+			ox := cx + math.Cos(a)*88
+			oy := cy + math.Sin(a)*46
+			c := spec.accentA
+			if i%2 == 1 {
+				c = spec.accentB
+			}
+			orbs = append(orbs, orb{ox, oy, 4.8 + 1.2*math.Sin(a), c})
+		}
 	case "working":
 		for i := 0; i < 3; i++ {
 			a := theta*spec.orbitSpd + float64(i)*2*math.Pi/3
@@ -193,7 +230,7 @@ func renderFrame(spec themeSpec, frame int, pal color.Palette) *image.Paletted {
 			} else if i == 2 {
 				c = spec.badge
 			}
-			orbs = append(orbs, orb{ox, oy, 5.2 + 1.5*math.Sin(a), c})
+			orbs = append(orbs, orb{ox, oy, 5.0 + 1.4*math.Sin(a), c})
 		}
 	case "shipped":
 		for i := 0; i < 6; i++ {
@@ -206,14 +243,14 @@ func renderFrame(spec themeSpec, frame int, pal color.Palette) *image.Paletted {
 			if i%2 == 1 {
 				c = spec.badge
 			}
-			orbs = append(orbs, orb{ox, oy, (1.0 - t) * 5.8, c})
+			orbs = append(orbs, orb{ox, oy, (1.0 - t) * 5.6, c})
 		}
 	case "compacting":
 		for i := 0; i < 4; i++ {
 			t := math.Mod(phase+float64(i)*0.25, 1.0)
 			dist := (1.0 - t) * 92
 			ang := theta + float64(i)*math.Pi/2
-			orbs = append(orbs, orb{cx + math.Cos(ang)*dist, cy + math.Sin(ang)*dist, 3.8 + t*2.5, spec.accentB})
+			orbs = append(orbs, orb{cx + math.Cos(ang)*dist, cy + math.Sin(ang)*dist, 3.8 + t*2.4, spec.accentB})
 		}
 	default:
 		for i := 0; i < 2; i++ {
@@ -222,17 +259,8 @@ func renderFrame(spec themeSpec, frame int, pal color.Palette) *image.Paletted {
 		}
 	}
 
-	// Antigravity sleek floating 'A' prism geometry (clean open hollow arch)
 	ay := cy + bobY
-	apexX, apexY := cx, ay-54
-	leftX, leftY := cx-45, ay+44
-	rightX, rightY := cx+45, ay+44
-	// Low smooth crescent bridge that leaves a crisp hollow triangle inside the 'A'
-	archLX, archLY := cx-23, ay+24
-	archMX, archMY := cx, ay+14
-	archRX, archRY := cx+23, ay+24
 
-	// 4x4 Bayer ordered dither matrix for silky band-free 256-color gradients
 	bayer := [4][4]float64{
 		{0, 8, 2, 10},
 		{12, 4, 14, 6},
@@ -240,7 +268,6 @@ func renderFrame(spec themeSpec, frame int, pal color.Palette) *image.Paletted {
 		{15, 7, 13, 5},
 	}
 
-	// Build nearest-color lookup cache for speed
 	palRGBA := make([]rgb, len(pal))
 	for i, c := range pal {
 		r, g, b, _ := c.RGBA()
@@ -266,139 +293,186 @@ func renderFrame(spec themeSpec, frame int, pal color.Palette) *image.Paletted {
 		return uint8(bestIdx)
 	}
 
+	// Dual mode positions: twin Antigravity 'A' on left-front + Claude starburst on right-back bobbing in harmony
+	dualAgyX, dualAgyY := cx-34, cy+math.Sin(theta)*6.0
+	dualCCX, dualCCY := cx+40, cy-math.Sin(theta)*6.0
+
 	for y := 0; y < size; y++ {
 		fy := float64(y)
 		vGrad := fy / float64(size)
 		for x := 0; x < size; x++ {
 			fx := float64(x)
 
-			// 1. Sleek dark slate background with soft atmospheric radial bloom
+			// 1. Sleek dark slate background + atmospheric bloom
 			col := lerpColor(spec.bgTop, spec.bgBot, vGrad)
-			distC := math.Hypot(fx-cx, fy-ay)
-			bloom := math.Exp(-(distC * distC) / (2 * 82 * 82))
-			col = screenGlow(col, lerpColor(spec.accentA, spec.accentB, 0.5+0.5*math.Sin(theta)), bloom*0.36)
+			if spec.kind == "dual" {
+				dA := math.Hypot(fx-dualAgyX, fy-dualAgyY)
+				dC := math.Hypot(fx-dualCCX, fy-dualCCY)
+				col = screenGlow(col, spec.accentA, math.Exp(-(dA*dA)/(2*72*72))*0.34)
+				col = screenGlow(col, spec.accentB, math.Exp(-(dC*dC)/(2*72*72))*0.34)
+			} else {
+				distC := math.Hypot(fx-cx, fy-ay)
+				bloom := math.Exp(-(distC * distC) / (2 * 82 * 82))
+				col = screenGlow(col, lerpColor(spec.accentA, spec.accentB, 0.5+0.5*math.Sin(theta)), bloom*0.36)
+			}
 
-			// 2. Subtle rounded frame rim (sleek Apple/Google app-icon silhouette)
+			// 2. Sleek rounded app-icon card rim
 			boxD := sdRoundedBox(fx-cx, fy-cy, 118, 118, 36)
 			if boxD > 0 {
-				// Soft vignette outside icon card
 				col = lerpColor(col, rgb{10, 12, 17}, smoothstep(0, 8, boxD)*0.65)
 			} else if math.Abs(boxD) < 2.2 {
 				rim := 1.0 - math.Abs(boxD)/2.2
-				col = addGlow(col, rgb{140, 165, 210}, rim*0.18)
+				col = addGlow(col, rgb{160, 175, 205}, rim*0.18)
 			}
 
-			// 3. Twinkling background stars
+			// 3. Background stars
 			for _, st := range stars {
 				sd := math.Hypot(fx-st.x, fy-st.y)
 				if sd < st.r*2.8 {
 					twinkle := 0.45 + 0.55*math.Sin(theta+st.ph)
 					a := math.Exp(-(sd*sd)/(2*st.r*st.r)) * twinkle * spec.starAlpha
-					col = screenGlow(col, rgb{230, 240, 255}, a)
+					col = screenGlow(col, rgb{235, 240, 255}, a)
 				}
 			}
 
-			// 4. Status-specific rings & waves
+			// 4. Status rings & waves
+			distC := math.Hypot(fx-cx, fy-ay)
 			switch spec.mode {
+			case "dual":
+				// Twin counter-tilted intersecting orbital rings
+				ang1 := 0.32
+				rx1 := ((fx-cx)*math.Cos(ang1) - (fy-cy)*math.Sin(ang1)) / 92.0
+				ry1 := ((fx-cx)*math.Sin(ang1) + (fy-cy)*math.Cos(ang1)) / 42.0
+				rd1 := math.Abs(math.Hypot(rx1, ry1) - 1.0)
+				if rd1 < 0.075 {
+					col = addGlow(col, spec.accentA, (1.0-rd1/0.075)*0.52)
+				}
+				ang2 := -0.32
+				rx2 := ((fx-cx)*math.Cos(ang2) - (fy-cy)*math.Sin(ang2)) / 92.0
+				ry2 := ((fx-cx)*math.Sin(ang2) + (fy-cy)*math.Cos(ang2)) / 42.0
+				rd2 := math.Abs(math.Hypot(rx2, ry2) - 1.0)
+				if rd2 < 0.075 {
+					col = addGlow(col, spec.accentB, (1.0-rd2/0.075)*0.52)
+				}
 			case "working":
-				// Tilted sleek orbital ring
 				rx := (fx - cx) / 84.0
 				ry := (fy - cy) / 34.0
 				rd := math.Abs(math.Hypot(rx, ry) - 1.0)
 				if rd < 0.08 {
-					alpha := (1.0 - rd/0.08) * 0.55
-					col = addGlow(col, spec.accentA, alpha)
+					col = addGlow(col, spec.accentA, (1.0-rd/0.08)*0.55)
 				}
 			case "thinking":
-				// Expanding neural halo rings
 				for k := 0; k < 2; k++ {
 					p := math.Mod(phase+float64(k)*0.5, 1.0)
 					rad := 34 + p*76
 					d := math.Abs(distC - rad)
 					if d < 4.0 {
-						alpha := (1.0 - d/4.0) * (1.0 - p) * 0.72
-						col = screenGlow(col, lerpColor(spec.accentA, spec.accentB, p), alpha)
+						col = screenGlow(col, lerpColor(spec.accentA, spec.accentB, p), (1.0-d/4.0)*(1.0-p)*0.72)
 					}
 				}
 			case "compacting":
-				// Contracting precision rings
 				for k := 0; k < 3; k++ {
 					p := math.Mod(phase+float64(k)/3.0, 1.0)
 					rad := 104 - p*72
 					d := math.Abs(distC - rad)
 					if d < 3.5 {
-						alpha := (1.0 - d/3.5) * math.Sin(p*math.Pi) * 0.75
-						col = screenGlow(col, spec.accentB, alpha)
+						col = screenGlow(col, spec.accentB, (1.0-d/3.5)*math.Sin(p*math.Pi)*0.75)
 					}
 				}
 			case "notification":
-				// Amber beacon ping rings
 				for k := 0; k < 2; k++ {
 					p := math.Mod(phase+float64(k)*0.5, 1.0)
 					rad := 42 + p*68
 					d := math.Abs(distC - rad)
 					if d < 4.5 {
-						alpha := (1.0 - d/4.5) * (1.0 - p) * 0.85
-						col = screenGlow(col, spec.badge, alpha)
+						col = screenGlow(col, spec.badge, (1.0-d/4.5)*(1.0-p)*0.85)
 					}
 				}
 			case "idle", "stale":
-				// Tranquil tilted halo
 				rx := (fx - cx) / 76.0
 				ry := (fy - cy) / 28.0
 				rd := math.Abs(math.Hypot(rx, ry) - 1.0)
 				if rd < 0.06 {
-					alpha := (1.0 - rd/0.06) * 0.30
-					col = addGlow(col, spec.accentA, alpha)
+					col = addGlow(col, spec.accentA, (1.0-rd/0.06)*0.30)
 				}
 			}
 
-			// 5. Floating ground-shadow beneath the levitating Antigravity prism
+			// 5. Floating ground shadow
 			shX := (fx - cx) / (46.0 - bobY*0.4)
 			shY := (fy - (cy + 70)) / 9.0
 			shD := shX*shX + shY*shY
 			if shD < 1.6 {
-				sh := math.Exp(-shD*2.2) * 0.42
-				col = addGlow(col, spec.accentA, sh*0.45)
+				col = addGlow(col, spec.accentA, math.Exp(-shD*2.2)*0.20)
 			}
 
-			// 6. Antigravity sleek sculpted 'A' prism (thick rounded anti-aliased strokes)
-			dLeft := sdSegment(fx, fy, apexX, apexY, leftX, leftY)
-			dRight := sdSegment(fx, fy, apexX, apexY, rightX, rightY)
-			dArch1 := sdSegment(fx, fy, archLX, archLY, archMX, archMY)
-			dArch2 := sdSegment(fx, fy, archMX, archMY, archRX, archRY)
+			// 6. Primary Emblem(s)
+			switch spec.kind {
+			case "antigravity":
+				dGlyph := sdAntigravityA(fx, fy, cx, ay, 1.0)
+				if dGlyph > 0 && dGlyph < 22 {
+					glowA := math.Exp(-(dGlyph*dGlyph)/(2*9*9)) * 0.50
+					gradT := math.Max(0, math.Min(1, (fx-(cx-50))/100.0))
+					col = screenGlow(col, lerpColor(spec.accentA, spec.accentB, gradT), glowA)
+				}
+				if dGlyph < 1.5 {
+					cov := 1.0 - smoothstep(-1.2, 1.2, dGlyph)
+					gradX := math.Max(0, math.Min(1, (fx-(cx-48))/96.0))
+					gradY := math.Max(0, math.Min(1, (fy-(ay-54))/100.0))
+					baseG := lerpColor(spec.accentA, spec.accentB, gradX*0.7+gradY*0.3)
+					sheen := math.Max(0, 1.0-gradY*1.6) * 0.45
+					col = addGlow(col, lerpColor(baseG, rgb{248, 251, 255}, sheen), cov)
+				}
 
-			dOuter := math.Min(dLeft, dRight)
-			dArch := math.Min(dArch1, dArch2)
-			dGlyph := math.Min(dOuter-10.5, dArch-6.8)
+			case "claude":
+				rot := theta * 0.25
+				if spec.mode == "idle" || spec.mode == "stale" {
+					rot = math.Sin(theta) * 0.14
+				}
+				dStar := sdStarburst(fx, fy, cx, ay, 48, 5.8, rot)
+				if dStar > 0 && dStar < 22 {
+					glowA := math.Exp(-(dStar*dStar)/(2*9*9)) * 0.52
+					gradT := math.Max(0, math.Min(1, (fx-(cx-50))/100.0))
+					col = screenGlow(col, lerpColor(spec.accentA, spec.accentB, gradT), glowA)
+				}
+				if dStar < 1.5 {
+					cov := 1.0 - smoothstep(-1.2, 1.2, dStar)
+					gradY := math.Max(0, math.Min(1, (fy-(ay-50))/100.0))
+					baseG := lerpColor(spec.accentB, spec.accentA, gradY)
+					sheen := math.Max(0, 1.0-gradY*1.6) * 0.42
+					col = addGlow(col, lerpColor(baseG, rgb{255, 248, 240}, sheen), cov)
+				}
 
-			// Outer glow around the Antigravity glyph
-			if dGlyph > 0 && dGlyph < 22 {
-				glowA := math.Exp(-(dGlyph*dGlyph)/(2*9*9)) * 0.50
-				gradT := math.Max(0, math.Min(1, (fx-(cx-50))/100.0))
-				col = screenGlow(col, lerpColor(spec.accentA, spec.accentB, gradT), glowA)
+			case "dual":
+				// Antigravity 'A' prism (left)
+				dA := sdAntigravityA(fx, fy, dualAgyX, dualAgyY, 0.72)
+				if dA > 0 && dA < 20 {
+					col = screenGlow(col, spec.accentA, math.Exp(-(dA*dA)/(2*8*8))*0.52)
+				}
+				if dA < 1.5 {
+					cov := 1.0 - smoothstep(-1.2, 1.2, dA)
+					gy := math.Max(0, math.Min(1, (fy-(dualAgyY-40))/80.0))
+					col = addGlow(col, lerpColor(spec.accentA, rgb{230, 246, 255}, math.Max(0, 1-gy*1.5)*0.55), cov)
+				}
+				// Claude geometric starburst (right)
+				dC := sdStarburst(fx, fy, dualCCX, dualCCY, 34, 4.4, theta*0.25)
+				if dC > 0 && dC < 20 {
+					col = screenGlow(col, spec.accentB, math.Exp(-(dC*dC)/(2*8*8))*0.52)
+				}
+				if dC < 1.5 {
+					cov := 1.0 - smoothstep(-1.2, 1.2, dC)
+					gy := math.Max(0, math.Min(1, (fy-(dualCCY-36))/72.0))
+					col = addGlow(col, lerpColor(spec.accentB, rgb{255, 244, 232}, math.Max(0, 1-gy*1.5)*0.5), cov)
+				}
 			}
-			// Crisp anti-aliased glyph fill with vertical + diagonal sheen
-			if dGlyph < 1.5 {
-				cov := 1.0 - smoothstep(-1.2, 1.2, dGlyph)
-				gradX := math.Max(0, math.Min(1, (fx-(cx-48))/96.0))
-				gradY := math.Max(0, math.Min(1, (fy-(ay-54))/100.0))
-				baseG := lerpColor(spec.accentA, spec.accentB, gradX*0.7+gradY*0.3)
-				// Subtle top glossy highlight
-				sheen := math.Max(0, 1.0-gradY*1.6) * 0.45
-				glyphCol := lerpColor(baseG, rgb{248, 251, 255}, sheen)
-				col = addGlow(col, glyphCol, cov)
-			}
 
-			// 7. Orbiting / launched glowing particles
+			// 7. Orbiting particles
 			for _, o := range orbs {
 				if o.rad <= 0.3 {
 					continue
 				}
 				od := math.Hypot(fx-o.x, fy-o.y)
 				if od < o.rad*3.5 {
-					halo := math.Exp(-(od*od)/(2*o.rad*o.rad)) * 0.72
-					col = screenGlow(col, o.col, halo)
+					col = screenGlow(col, o.col, math.Exp(-(od*od)/(2*o.rad*o.rad))*0.72)
 					if od < o.rad {
 						core := 1.0 - smoothstep(o.rad*0.4, o.rad, od)
 						col = addGlow(col, rgb{255, 255, 255}, core*0.85)
@@ -406,7 +480,7 @@ func renderFrame(spec themeSpec, frame int, pal color.Palette) *image.Paletted {
 				}
 			}
 
-			// 8. Corner live status indicator pill/dot (bottom-right)
+			// 8. Corner live status indicator dot
 			bx, by := float64(size)-40, float64(size)-40
 			bd := math.Hypot(fx-bx, fy-by)
 			pulse := 0.75 + 0.25*math.Sin(theta*2)
@@ -414,12 +488,10 @@ func renderFrame(spec themeSpec, frame int, pal color.Palette) *image.Paletted {
 				col = screenGlow(col, spec.badge, math.Exp(-(bd*bd)/(2*9*9))*0.55*pulse)
 			}
 			if bd < 10.5 {
-				// Dark collar around status dot
 				col = addGlow(col, spec.bgBot, 1.0-smoothstep(8.5, 10.5, bd))
 			}
 			if bd < 7.5 {
-				dotCov := 1.0 - smoothstep(5.8, 7.5, bd)
-				col = addGlow(col, spec.badge, dotCov)
+				col = addGlow(col, spec.badge, 1.0-smoothstep(5.8, 7.5, bd))
 			}
 
 			img.SetColorIndex(x, y, nearest(col, x, y))
@@ -435,40 +507,85 @@ func main() {
 	}
 
 	specs := []themeSpec{
+		// Antigravity GIFs (7 statuses)
 		{
-			name: "agy-working.gif", mode: "working", delayCS: 9, bobAmp: 6.0, orbitSpd: 1.0, starAlpha: 0.75,
+			name: "agy-working.gif", kind: "antigravity", mode: "working", delayCS: 9, bobAmp: 6.0, orbitSpd: 1.0, starAlpha: 0.75,
 			bgTop: rgb{18, 22, 34}, bgBot: rgb{12, 14, 21},
 			accentA: rgb{66, 133, 244}, accentB: rgb{56, 189, 248}, badge: rgb{52, 168, 83},
 		},
 		{
-			name: "agy-thinking.gif", mode: "thinking", delayCS: 10, bobAmp: 7.5, orbitSpd: 1.0, starAlpha: 0.85,
+			name: "agy-thinking.gif", kind: "antigravity", mode: "thinking", delayCS: 10, bobAmp: 7.5, orbitSpd: 1.0, starAlpha: 0.85,
 			bgTop: rgb{22, 20, 38}, bgBot: rgb{13, 14, 22},
 			accentA: rgb{99, 102, 241}, accentB: rgb{167, 139, 250}, badge: rgb{138, 180, 248},
 		},
 		{
-			name: "agy-compacting.gif", mode: "compacting", delayCS: 9, bobAmp: 4.5, orbitSpd: 1.0, starAlpha: 0.65,
+			name: "agy-compacting.gif", kind: "antigravity", mode: "compacting", delayCS: 9, bobAmp: 4.5, orbitSpd: 1.0, starAlpha: 0.65,
 			bgTop: rgb{19, 22, 38}, bgBot: rgb{12, 13, 20},
 			accentA: rgb{83, 127, 196}, accentB: rgb{129, 140, 248}, badge: rgb{96, 165, 250},
 		},
 		{
-			name: "agy-shipped.gif", mode: "shipped", delayCS: 8, bobAmp: 8.5, orbitSpd: 1.0, starAlpha: 0.9,
+			name: "agy-shipped.gif", kind: "antigravity", mode: "shipped", delayCS: 8, bobAmp: 8.5, orbitSpd: 1.0, starAlpha: 0.9,
 			bgTop: rgb{15, 28, 26}, bgBot: rgb{12, 15, 20},
 			accentA: rgb{52, 168, 83}, accentB: rgb{66, 133, 244}, badge: rgb{251, 188, 5},
 		},
 		{
-			name: "agy-notification.gif", mode: "notification", delayCS: 9, bobAmp: 5.0, orbitSpd: 1.0, starAlpha: 0.65,
+			name: "agy-notification.gif", kind: "antigravity", mode: "notification", delayCS: 9, bobAmp: 5.0, orbitSpd: 1.0, starAlpha: 0.65,
 			bgTop: rgb{32, 24, 18}, bgBot: rgb{15, 14, 18},
 			accentA: rgb{251, 188, 5}, accentB: rgb{249, 115, 22}, badge: rgb{251, 188, 5},
 		},
 		{
-			name: "agy-idle.gif", mode: "idle", delayCS: 13, bobAmp: 4.5, orbitSpd: 1.0, starAlpha: 0.8,
+			name: "agy-idle.gif", kind: "antigravity", mode: "idle", delayCS: 13, bobAmp: 4.5, orbitSpd: 1.0, starAlpha: 0.8,
 			bgTop: rgb{17, 20, 30}, bgBot: rgb{11, 13, 19},
 			accentA: rgb{83, 127, 196}, accentB: rgb{138, 180, 248}, badge: rgb{148, 163, 184},
 		},
 		{
-			name: "agy-stale.gif", mode: "stale", delayCS: 15, bobAmp: 2.0, orbitSpd: 1.0, starAlpha: 0.45,
+			name: "agy-stale.gif", kind: "antigravity", mode: "stale", delayCS: 15, bobAmp: 2.0, orbitSpd: 1.0, starAlpha: 0.45,
 			bgTop: rgb{16, 18, 24}, bgBot: rgb{11, 12, 16},
 			accentA: rgb{71, 85, 105}, accentB: rgb{100, 116, 139}, badge: rgb{71, 85, 105},
+		},
+
+		// Dual Wielding GIF (Antigravity + Claude Code harmonic twin orbit)
+		{
+			name: "agy-dual.gif", kind: "dual", mode: "dual", delayCS: 9, bobAmp: 5.5, orbitSpd: 1.0, starAlpha: 0.85,
+			bgTop: rgb{22, 20, 34}, bgBot: rgb{11, 12, 18},
+			accentA: rgb{66, 133, 244}, accentB: rgb{217, 119, 87}, badge: rgb{52, 211, 153},
+		},
+
+		// Original Custom Claude Code GIFs (warm terracotta / amber geometric starburst)
+		{
+			name: "claude-working.gif", kind: "claude", mode: "working", delayCS: 9, bobAmp: 6.0, orbitSpd: 1.0, starAlpha: 0.75,
+			bgTop: rgb{30, 20, 18}, bgBot: rgb{15, 12, 14},
+			accentA: rgb{217, 119, 87}, accentB: rgb{245, 166, 126}, badge: rgb{52, 168, 83},
+		},
+		{
+			name: "claude-thinking.gif", kind: "claude", mode: "thinking", delayCS: 10, bobAmp: 7.5, orbitSpd: 1.0, starAlpha: 0.85,
+			bgTop: rgb{30, 20, 26}, bgBot: rgb{14, 12, 16},
+			accentA: rgb{217, 119, 87}, accentB: rgb{251, 191, 140}, badge: rgb{245, 166, 126},
+		},
+		{
+			name: "claude-compacting.gif", kind: "claude", mode: "compacting", delayCS: 9, bobAmp: 4.5, orbitSpd: 1.0, starAlpha: 0.65,
+			bgTop: rgb{28, 20, 22}, bgBot: rgb{14, 12, 15},
+			accentA: rgb{204, 107, 73}, accentB: rgb{236, 154, 116}, badge: rgb{245, 166, 126},
+		},
+		{
+			name: "claude-shipped.gif", kind: "claude", mode: "shipped", delayCS: 8, bobAmp: 8.5, orbitSpd: 1.0, starAlpha: 0.9,
+			bgTop: rgb{22, 26, 20}, bgBot: rgb{12, 14, 15},
+			accentA: rgb{52, 168, 83}, accentB: rgb{217, 119, 87}, badge: rgb{251, 188, 5},
+		},
+		{
+			name: "claude-notification.gif", kind: "claude", mode: "notification", delayCS: 9, bobAmp: 5.0, orbitSpd: 1.0, starAlpha: 0.65,
+			bgTop: rgb{34, 24, 16}, bgBot: rgb{15, 13, 14},
+			accentA: rgb{251, 188, 5}, accentB: rgb{217, 119, 87}, badge: rgb{251, 188, 5},
+		},
+		{
+			name: "claude-idle.gif", kind: "claude", mode: "idle", delayCS: 13, bobAmp: 4.5, orbitSpd: 1.0, starAlpha: 0.8,
+			bgTop: rgb{24, 19, 19}, bgBot: rgb{12, 11, 13},
+			accentA: rgb{190, 116, 92}, accentB: rgb{224, 158, 132}, badge: rgb{148, 163, 184},
+		},
+		{
+			name: "claude-stale.gif", kind: "claude", mode: "stale", delayCS: 15, bobAmp: 2.0, orbitSpd: 1.0, starAlpha: 0.45,
+			bgTop: rgb{20, 18, 19}, bgBot: rgb{11, 11, 13},
+			accentA: rgb{110, 90, 86}, accentB: rgb{140, 120, 116}, badge: rgb{90, 95, 105},
 		},
 	}
 

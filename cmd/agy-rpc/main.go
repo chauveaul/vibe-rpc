@@ -25,6 +25,7 @@ import (
 	"github.com/meze/agy-rpc/internal/presence"
 	"github.com/meze/agy-rpc/internal/pricing"
 	"github.com/meze/agy-rpc/internal/privacy"
+	"github.com/meze/agy-rpc/internal/proc"
 	"github.com/meze/agy-rpc/internal/scanner"
 	"github.com/meze/agy-rpc/internal/server"
 	"github.com/meze/agy-rpc/internal/state"
@@ -78,10 +79,21 @@ func resolveLiveState() (config.Config, *scanner.Aggregate, state.SessionState) 
 	} else {
 		st = state.Read("")
 	}
-	st.AntigravityActive, st.ClaudeActive = presence.ComputeActiveSources(sessions, nil, nil, nil, cfg, now)
+	var agyProc, claudeProc *bool
+	if cfg.IsProcessDetection() {
+		ag := proc.Detect(cfg.Sources.WantAntigravity(), cfg.Sources.WantClaude())
+		agyProc, claudeProc = ag.Antigravity, ag.Claude
+		st.AgentProcessAlive = ag.Any
+	}
+	st.AntigravityActive, st.ClaudeActive = presence.ComputeActiveSources(sessions, nil, agyProc, claudeProc, cfg, now)
+	st.SourcesComputed = true
+	st.AgySession, st.ClaudeSession = presence.PickDualSnapshots(sessions, nil, cfg, now)
 	st = format.ApplyIdle(st, cfg)
 	st = format.ApplyShipped(st, cfg)
 	st = format.ApplyTrigger(st, cfg)
+	if presence.IsDualWorking(st) {
+		st.Status = "dual"
+	}
 	return cfg, agg, st
 }
 

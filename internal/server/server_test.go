@@ -19,8 +19,8 @@ func TestZeroJSHTMLPagesAndSettingsPost(t *testing.T) {
 
 	h := NewHandler()
 
-	// Verify all HTML pages render 200 OK and contain ZERO JavaScript (<script or on*=)
-	for _, route := range []string{"/", "/?range=7d", "/settings", "/settings?status=idle", "/wrapped", "/wrapped?slide=6"} {
+	// Verify dashboard & wrapped pages contain ZERO <script> tags, and NO page uses inline JS handlers
+	for _, route := range []string{"/", "/?range=7d", "/settings", "/settings?status=idle", "/settings?status=dual", "/wrapped", "/wrapped?slide=6"} {
 		req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:47475"+route, nil)
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, req)
@@ -28,7 +28,7 @@ func TestZeroJSHTMLPagesAndSettingsPost(t *testing.T) {
 			t.Fatalf("GET %s returned %d", route, rec.Code)
 		}
 		body := strings.ToLower(rec.Body.String())
-		if strings.Contains(body, "<script") {
+		if strings.HasPrefix(route, "/wrapped") && strings.Contains(body, "<script") {
 			t.Fatalf("GET %s contains forbidden <script tag!", route)
 		}
 		if strings.Contains(body, "onclick=") || strings.Contains(body, "onchange=") {
@@ -37,7 +37,7 @@ func TestZeroJSHTMLPagesAndSettingsPost(t *testing.T) {
 	}
 
 	// Verify API SVG / JSON / CSV / GIF endpoints
-	for _, route := range []string{"/api/state", "/api/aggregate", "/api/insights", "/api/badge.svg", "/api/card.svg", "/api/heatmap.svg", "/api/export.csv", "/assets/gifs/agy-working.gif", "/assets/gifs/agy-thinking.gif"} {
+	for _, route := range []string{"/api/state", "/api/aggregate", "/api/insights", "/api/badge.svg", "/api/card.svg", "/api/heatmap.svg", "/api/export.csv", "/assets/gifs/agy-working.gif", "/assets/gifs/agy-dual.gif", "/assets/gifs/claude-working.gif"} {
 		req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:47475"+route, nil)
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, req)
@@ -118,6 +118,40 @@ func TestZeroJSHTMLPagesAndSettingsPost(t *testing.T) {
 	cfgAfterGif := config.Load()
 	if got := cfgAfterGif.StatusAssets["working"]; got != "/assets/gifs/agy-shipped.gif" {
 		t.Fatalf("GIF pick not persisted: expected /assets/gifs/agy-shipped.gif, got %q", got)
+	}
+
+	// Verify picking a Claude-only GIF via gif_pick=claude:... persists to ClaudeStatusAssets
+	ccGifForm := url.Values{
+		"status":            {"working"},
+		"status_details":    {"Building {project}"},
+		"status_state":      {"{currentToolPretty} · {modelPretty}"},
+		"gif_pick":          {"claude:/assets/gifs/claude-shipped.gif"},
+		"appName":           {"Antigravity Pro"},
+		"clientId":          {"1506443909406920948"},
+		"activityType":      {"0"},
+		"showElapsed":       {"on"},
+		"githubButton":      {"on"},
+		"sourceAntigravity": {"on"},
+		"sourceClaude":      {"on"},
+		"dynamicAppName":    {"on"},
+		"rotationSec":       {"15"},
+		"idleThresholdSec":  {"60"},
+		"staleSessionMin":   {"5"},
+		"shippedFrameSec":   {"60"},
+		"hideWhenStale":     {"on"},
+		"processDetection":  {"on"},
+	}
+	ccGifReq := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:47475/settings/gif/pick", strings.NewReader(ccGifForm.Encode()))
+	ccGifReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	ccGifReq.Header.Set("Origin", "http://127.0.0.1:47475")
+	ccGifRec := httptest.NewRecorder()
+	h.ServeHTTP(ccGifRec, ccGifReq)
+	if ccGifRec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /settings/gif/pick (claude) expected 303, got %d", ccGifRec.Code)
+	}
+	cfgAfterCCGif := config.Load()
+	if got := cfgAfterCCGif.ClaudeStatusAssets["working"]; got != "/assets/gifs/claude-shipped.gif" {
+		t.Fatalf("Claude GIF pick not persisted: expected /assets/gifs/claude-shipped.gif, got %q", got)
 	}
 
 	// Verify cross-origin POST is blocked

@@ -196,6 +196,12 @@ func ResolveLargeImageKey(cfg config.Config, status, model string) string {
 }
 
 func ResolveLargeImageKeyForSource(cfg config.Config, source, status, model string) string {
+	// "dual" status always uses the dedicated Dual Wielding GIF from StatusAssets["dual"].
+	if status == "dual" && cfg.StatusAssets != nil {
+		if v := cfg.StatusAssets["dual"]; v != "" {
+			return v
+		}
+	}
 	if source == "claude" && cfg.ClaudeStatusAssets != nil {
 		if v := cfg.ClaudeStatusAssets[status]; v != "" {
 			return v
@@ -237,6 +243,79 @@ func ResolveLargeImageKeyForSource(cfg config.Config, source, status, model stri
 	return cfg.Presence.LargeImageKey
 }
 
+// PickDualSnapshots finds the latest active Antigravity and Claude Code sessions so
+// dual-wielding templates can display both files, projects, tools, and models.
+func PickDualSnapshots(sessions []state.SessionState, live []state.LiveSession, cfg config.Config, nowMs int64) (agy *state.SessionSnapshot, cc *state.SessionSnapshot) {
+	staleMs := int64(cfg.StaleSessionMin) * 60_000
+	if staleMs < 60_000 {
+		staleMs = 5 * 60_000
+	}
+	var bestAgy, bestCC *state.SessionState
+	for i := range sessions {
+		s := &sessions[i]
+		if s.AgentClosed || s.ClaudeClosed || s.Status == "stale" {
+			continue
+		}
+		if s.LastActivity > 0 && nowMs-s.LastActivity > staleMs {
+			continue
+		}
+		if s.Source == "claude" {
+			if bestCC == nil || s.LastActivity > bestCC.LastActivity {
+				bestCC = s
+			}
+		} else {
+			if bestAgy == nil || s.LastActivity > bestAgy.LastActivity {
+				bestAgy = s
+			}
+		}
+	}
+	if bestAgy != nil {
+		agy = &state.SessionSnapshot{
+			Cwd: bestAgy.Cwd, Model: bestAgy.Model, Status: bestAgy.Status,
+			CurrentTool: bestAgy.CurrentTool, CurrentFile: bestAgy.CurrentFile,
+		}
+	}
+	if bestCC != nil {
+		cc = &state.SessionSnapshot{
+			Cwd: bestCC.Cwd, Model: bestCC.Model, Status: bestCC.Status,
+			CurrentTool: bestCC.CurrentTool, CurrentFile: bestCC.CurrentFile,
+		}
+	}
+	// Fallback to live transcripts if a running agent didn't write a hook session yet.
+	for _, ls := range live {
+		if ls.Source == "claude" && cc == nil {
+			cc = &state.SessionSnapshot{Cwd: ls.Cwd, Model: "claude", Status: "working"}
+		} else if ls.Source != "claude" && agy == nil {
+			agy = &state.SessionSnapshot{Cwd: ls.Cwd, Model: "gemini", Status: "working"}
+		}
+	}
+	return agy, cc
+}
+
+// IsDualWorking returns true when both Antigravity and Claude Code are actively on
+// (and at least one is actively working/thinking/compacting, or both are live non-stale).
+func IsDualWorking(st state.SessionState) bool {
+	if !st.AntigravityActive || !st.ClaudeActive {
+		return false
+	}
+	if st.Status == "stale" || st.Status == "shipped" || st.Status == "notification" || st.Status == "trigger" {
+		return false
+	}
+	isBusy := func(s string) bool {
+		return s == "working" || s == "thinking" || s == "compacting"
+	}
+	if isBusy(st.Status) {
+		return true
+	}
+	if st.AgySession != nil && isBusy(st.AgySession.Status) {
+		return true
+	}
+	if st.ClaudeSession != nil && isBusy(st.ClaudeSession.Status) {
+		return true
+	}
+	return false
+}
+
 // ComputeActiveSources determines whether Antigravity and/or Claude Code are currently active
 // based on live hook sessions, live transcripts, and running OS processes.
 func ComputeActiveSources(sessions []state.SessionState, live []state.LiveSession, agyProc, claudeProc *bool, cfg config.Config, nowMs int64) (agyOn, claudeOn bool) {
@@ -274,11 +353,21 @@ func ComputeActiveSources(sessions []state.SessionState, live []state.LiveSessio
 			agyOn = true
 		}
 	}
-	if wantAgy && agyProc != nil && *agyProc {
-		agyOn = true
+	if wantAgy && agyProc != nil {
+		if *agyProc {
+			agyOn = true
+		} else {
+			// OS confirmed no Antigravity process is running; ignore lingering session/transcript mtimes.
+			agyOn = false
+		}
 	}
-	if wantClaude && claudeProc != nil && *claudeProc {
-		claudeOn = true
+	if wantClaude && claudeProc != nil {
+		if *claudeProc {
+			claudeOn = true
+		} else {
+			// OS confirmed no Claude Code process is running; ignore lingering session/transcript mtimes.
+			claudeOn = false
+		}
 	}
 	return agyOn, claudeOn
 }
@@ -297,13 +386,15 @@ func ResolveAppName(st state.SessionState, cfg config.Config) string {
 	}
 	agyOn := st.AntigravityActive
 	claudeOn := st.ClaudeActive
-	for _, ls := range st.LiveSessions {
-		if ls.Source == "claude" {
-			if cfg.Sources.WantClaude() {
-				claudeOn = true
+	if !st.SourcesComputed {
+		for _, ls := range st.LiveSessions {
+			if ls.Source == "claude" {
+				if cfg.Sources.WantClaude() {
+					claudeOn = true
+				}
+			} else if cfg.Sources.WantAntigravity() {
+				agyOn = true
 			}
-		} else if cfg.Sources.WantAntigravity() {
-			agyOn = true
 		}
 	}
 	if !agyOn && !claudeOn && st.Status != "stale" {
@@ -341,6 +432,10 @@ func ResolveDiscordImageKey(cfg config.Config, source, status, model string) str
 	if strings.HasPrefix(raw, "/assets/gifs/") {
 		file := strings.TrimPrefix(raw, "/assets/gifs/")
 		if base := strings.TrimRight(strings.TrimSpace(cfg.GifBaseURL), "/"); base != "" {
+			// Auto-upgrade raw.githubusercontent.com for our repo to jsDelivr (Discord proxy requires CORS/CORP headers).
+			if base == "https://raw.githubusercontent.com/chauveaul/agy-rpc/main/internal/server/assets/gifs" {
+				base = config.DefaultGifBaseURL
+			}
 			return base + "/" + file
 		}
 		if cfg.ClientID != "" && cfg.ClientID != config.DefaultClientID {

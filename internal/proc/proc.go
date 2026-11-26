@@ -71,6 +71,10 @@ func Detect(includeAntigravity, includeClaude bool) ActiveAgents {
 	for _, p := range procs {
 		name, _ := p.Name()
 		cmd, _ := p.Cmdline()
+		exe, _ := p.Exe()
+		if cmd == "" && exe != "" {
+			cmd = exe
+		}
 		if includeAntigravity && !agy && LooksLikeAntigravity(name, cmd) {
 			agy = true
 		}

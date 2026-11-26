@@ -271,6 +271,8 @@ func StatusVerbose(status, toolPretty string, idleMs int64) string {
 		return "Thinking"
 	case "compacting":
 		return "Compacting context"
+	case "dual":
+		return "Dual wielding"
 	case "notification":
 		return "Waiting on you"
 	case "idle":
@@ -598,10 +600,94 @@ func BuildVars(st state.SessionState, cfg config.Config, agg *scanner.Aggregate)
 		compactTriggerLabel = "auto-compaction"
 	}
 
+	// Dual-wielding per-agent variables (Antigravity + Claude Code)
+	agyProj, agyModel, agyFile, agyTool := "", "", "", ""
+	ccProj, ccModel, ccFile, ccTool := "", "", "", ""
+	if st.AgySession != nil {
+		if st.AgySession.Cwd != "" {
+			agyProj = safeProject(st.AgySession.Cwd)
+		}
+		if st.AgySession.Model != "" {
+			agyModel = HumanModel(st.AgySession.Model)
+		}
+		agyFile = prettyFilePath(st.AgySession.CurrentFile)
+		agyTool = HumanTool(st.AgySession.CurrentTool)
+	} else if st.Source != "claude" {
+		agyProj = projectPretty
+		agyModel = modelPretty
+		agyFile = prettyFilePath(st.CurrentFile)
+		agyTool = toolPretty
+	}
+	if st.ClaudeSession != nil {
+		if st.ClaudeSession.Cwd != "" {
+			ccProj = safeProject(st.ClaudeSession.Cwd)
+		}
+		if st.ClaudeSession.Model != "" {
+			ccModel = HumanModel(st.ClaudeSession.Model)
+		}
+		ccFile = prettyFilePath(st.ClaudeSession.CurrentFile)
+		ccTool = HumanTool(st.ClaudeSession.CurrentTool)
+	} else if st.Source == "claude" {
+		ccProj = projectPretty
+		ccModel = modelPretty
+		ccFile = prettyFilePath(st.CurrentFile)
+		ccTool = toolPretty
+	}
+	if agyModel == "" {
+		agyModel = "Antigravity"
+	}
+	if ccModel == "" {
+		ccModel = "Claude"
+	}
+	dualModels := agyModel + " + " + ccModel
+
+	joinPair := func(a, b string) string {
+		if a != "" && b != "" {
+			if strings.EqualFold(a, b) {
+				return a
+			}
+			return a + " & " + b
+		}
+		if a != "" {
+			return a
+		}
+		return b
+	}
+	dualProjects := joinPair(agyProj, ccProj)
+	if dualProjects == "" {
+		dualProjects = projectPretty
+	}
+	dualFiles := joinPair(agyFile, ccFile)
+	// Smart combined target: prefers two files, falls back to file + project, or two projects
+	tA := agyFile
+	if tA == "" {
+		tA = agyProj
+	}
+	tB := ccFile
+	if tB == "" {
+		tB = ccProj
+	}
+	dualTargets := joinPair(tA, tB)
+	if dualTargets == "" {
+		dualTargets = projectPretty
+	}
+
 	return map[string]any{
 		"source":                source,
 		"sourcePretty":          sourcePretty,
 		"sourcesActiveLabel":    sourcesActiveLabel,
+		"agyProject":            agyProj,
+		"claudeProject":         ccProj,
+		"dualProjects":          dualProjects,
+		"agyFile":               agyFile,
+		"claudeFile":            ccFile,
+		"dualFiles":             dualFiles,
+		"dualTargets":           dualTargets,
+		"agyModel":              agyModel,
+		"claudeModel":           ccModel,
+		"dualModels":            dualModels,
+		"agyTool":               agyTool,
+		"claudeTool":            ccTool,
 		"agySessions":           agySrc.Sessions,
 		"claudeSessions":        ccSrc.Sessions,
 		"agyHours":              FmtHours(agySrc.ActiveMs),

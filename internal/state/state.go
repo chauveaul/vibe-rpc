@@ -80,8 +80,20 @@ type SessionState struct {
 	AgentProcessAlive *bool           `json:"-"`
 	AntigravityActive bool            `json:"antigravityActive,omitempty"`
 	ClaudeActive      bool            `json:"claudeActive,omitempty"`
+	SourcesComputed   bool            `json:"-"`
+	AgySession        *SessionSnapshot `json:"agySession,omitempty"`
+	ClaudeSession     *SessionSnapshot `json:"claudeSession,omitempty"`
 	Privacy           *PrivacyVerdict `json:"-"`
 	TriggerFrame      *TriggerFrame   `json:"-"`
+}
+
+// SessionSnapshot holds per-agent details when both Antigravity and Claude Code are active.
+type SessionSnapshot struct {
+	Cwd         string `json:"cwd,omitempty"`
+	Model       string `json:"model,omitempty"`
+	Status      string `json:"status,omitempty"`
+	CurrentTool string `json:"currentTool,omitempty"`
+	CurrentFile string `json:"currentFile,omitempty"`
 }
 
 func DefaultState() SessionState {

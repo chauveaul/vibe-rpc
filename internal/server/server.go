@@ -24,6 +24,7 @@ import (
 	"github.com/meze/agy-rpc/internal/presence"
 	"github.com/meze/agy-rpc/internal/pricing"
 	"github.com/meze/agy-rpc/internal/privacy"
+	"github.com/meze/agy-rpc/internal/proc"
 	"github.com/meze/agy-rpc/internal/scanner"
 	"github.com/meze/agy-rpc/internal/state"
 	"github.com/meze/agy-rpc/internal/stats"
@@ -34,19 +35,28 @@ const DefaultPort = 47475
 //go:embed assets/* assets/gifs/*
 var assetFS embed.FS
 
-// BuiltinGifs lists the embedded Antigravity animated Discord GIFs.
+// BuiltinGifs lists all embedded animated Discord GIFs (Antigravity, Dual Wielding, and Claude Code).
 var BuiltinGifs = []struct {
 	Key   string
+	Group string // "antigravity", "dual", "claude"
 	Label string
 	File  string
 }{
-	{"working", "Working", "agy-working.gif"},
-	{"thinking", "Thinking", "agy-thinking.gif"},
-	{"compacting", "Compacting", "agy-compacting.gif"},
-	{"shipped", "Shipped", "agy-shipped.gif"},
-	{"notification", "Waiting", "agy-notification.gif"},
-	{"idle", "Idle", "agy-idle.gif"},
-	{"stale", "Away", "agy-stale.gif"},
+	{"working", "antigravity", "Working", "agy-working.gif"},
+	{"thinking", "antigravity", "Thinking", "agy-thinking.gif"},
+	{"compacting", "antigravity", "Compacting", "agy-compacting.gif"},
+	{"shipped", "antigravity", "Shipped", "agy-shipped.gif"},
+	{"notification", "antigravity", "Waiting", "agy-notification.gif"},
+	{"idle", "antigravity", "Idle", "agy-idle.gif"},
+	{"stale", "antigravity", "Away", "agy-stale.gif"},
+	{"dual", "dual", "Dual", "agy-dual.gif"},
+	{"working", "claude", "Working", "claude-working.gif"},
+	{"thinking", "claude", "Thinking", "claude-thinking.gif"},
+	{"compacting", "claude", "Compacting", "claude-compacting.gif"},
+	{"shipped", "claude", "Shipped", "claude-shipped.gif"},
+	{"notification", "claude", "Waiting", "claude-notification.gif"},
+	{"idle", "claude", "Idle", "claude-idle.gif"},
+	{"stale", "claude", "Away", "claude-stale.gif"},
 }
 
 // ExportGifs writes all embedded Antigravity animated GIFs to dir.
@@ -149,10 +159,21 @@ func loadLive() (config.Config, *scanner.Aggregate, state.SessionState) {
 	} else {
 		st = state.Read("")
 	}
-	st.AntigravityActive, st.ClaudeActive = presence.ComputeActiveSources(sessions, nil, nil, nil, cfg, now)
+	var agyProc, claudeProc *bool
+	if cfg.IsProcessDetection() {
+		ag := proc.Detect(cfg.Sources.WantAntigravity(), cfg.Sources.WantClaude())
+		agyProc, claudeProc = ag.Antigravity, ag.Claude
+		st.AgentProcessAlive = ag.Any
+	}
+	st.AntigravityActive, st.ClaudeActive = presence.ComputeActiveSources(sessions, nil, agyProc, claudeProc, cfg, now)
+	st.SourcesComputed = true
+	st.AgySession, st.ClaudeSession = presence.PickDualSnapshots(sessions, nil, cfg, now)
 	st = format.ApplyIdle(st, cfg)
 	st = format.ApplyShipped(st, cfg)
 	st = format.ApplyTrigger(st, cfg)
+	if presence.IsDualWorking(st) {
+		st.Status = "dual"
+	}
 	return cfg, agg, st
 }
 
@@ -310,12 +331,12 @@ type projDrawerView struct {
 	Removed  string
 }
 
-var langPalette = []string{"#4285f4", "#38bdf8", "#6366f1", "#34a853", "#fbbc05", "#a78bfa"}
+var langPalette = []string{"#f5f5f7", "#d1d5db", "#9ca3af", "#6b7280", "#4b5563", "#374151"}
 
 func renderActivitySVG(rows []stats.WeekRow) template.HTML {
 	const w, h = 480.0, 110.0
 	if len(rows) == 0 {
-		return template.HTML(`<svg class="chart" viewBox="0 0 480 110"><text x="240" y="60" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="11" fill="#8a97b0">No activity yet</text></svg>`)
+		return template.HTML(`<svg class="chart" viewBox="0 0 480 110"><text x="240" y="60" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="11" fill="#8c9099">No activity yet</text></svg>`)
 	}
 	var maxMs int64 = 1
 	for _, r := range rows {
@@ -331,18 +352,18 @@ func renderActivitySVG(rows []stats.WeekRow) template.HTML {
 		y := h - 8 - (float64(r.ActiveMs)/float64(maxMs))*(h-20)
 		pts = append(pts, fmt.Sprintf("%.1f,%.1f", x, y))
 		if r.ActiveMs > 0 {
-			fmt.Fprintf(&dots, `<circle cx="%.1f" cy="%.1f" r="3.2" fill="#8ab4f8" stroke="#181d2b" stroke-width="1.5"><title>%s: %s (%d prompts)</title></circle>`,
+			fmt.Fprintf(&dots, `<circle cx="%.1f" cy="%.1f" r="3.2" fill="#f5f5f7" stroke="#0c0d10" stroke-width="1.5"><title>%s: %s (%d prompts)</title></circle>`,
 				x, y, html.EscapeString(r.Day), html.EscapeString(format.FmtHours(r.ActiveMs)), r.Prompts)
 		}
 	}
 	poly := strings.Join(pts, " ")
 	area := fmt.Sprintf("0,%.1f %s %.1f,%.1f", h, poly, w, h)
 	svg := fmt.Sprintf(`<svg class="chart" viewBox="0 0 480 110" preserveAspectRatio="none">
-  <defs><linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%%" stop-color="#4285f4" stop-opacity="0.38"/><stop offset="100%%" stop-color="#4285f4" stop-opacity="0.01"/></linearGradient></defs>
-  <line x1="0" y1="30" x2="480" y2="30" stroke="#ffffff" stroke-dasharray="2 4" stroke-width="1" opacity="0.09"/>
-  <line x1="0" y1="70" x2="480" y2="70" stroke="#ffffff" stroke-dasharray="2 4" stroke-width="1" opacity="0.09"/>
+  <defs><linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%%" stop-color="#ffffff" stop-opacity="0.22"/><stop offset="100%%" stop-color="#ffffff" stop-opacity="0.01"/></linearGradient></defs>
+  <line x1="0" y1="30" x2="480" y2="30" stroke="#ffffff" stroke-dasharray="2 4" stroke-width="1" opacity="0.08"/>
+  <line x1="0" y1="70" x2="480" y2="70" stroke="#ffffff" stroke-dasharray="2 4" stroke-width="1" opacity="0.08"/>
   <polygon points="%s" fill="url(#areaGrad)"/>
-  <polyline points="%s" fill="none" stroke="#60a5fa" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <polyline points="%s" fill="none" stroke="#e5e7eb" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
   %s
 </svg>`, area, poly, dots.String())
 	return template.HTML(svg)
@@ -373,11 +394,11 @@ func renderChurnSVG(agg *scanner.Aggregate) template.HTML {
 		}
 		if add > 0 {
 			ah := math.Max(3, float64(add)/float64(maxL)*28)
-			fmt.Fprintf(&b, `<rect x="%d" y="%.1f" width="13" height="%.1f" rx="3" fill="#34a853" opacity="0.9"><title>%s: +%d lines</title></rect>`, x, 32-ah, ah, r.Day, add)
+			fmt.Fprintf(&b, `<rect x="%d" y="%.1f" width="13" height="%.1f" rx="3" fill="#e5e7eb" opacity="0.9"><title>%s: +%d lines</title></rect>`, x, 32-ah, ah, r.Day, add)
 		}
 		if rem > 0 {
 			rh := math.Max(3, float64(rem)/float64(maxL)*28)
-			fmt.Fprintf(&b, `<rect x="%d" y="33" width="13" height="%.1f" rx="3" fill="#ea4335" opacity="0.85"><title>%s: -%d lines</title></rect>`, x, rh, r.Day, rem)
+			fmt.Fprintf(&b, `<rect x="%d" y="33" width="13" height="%.1f" rx="3" fill="#6b7280" opacity="0.8"><title>%s: -%d lines</title></rect>`, x, rh, r.Day, rem)
 		}
 	}
 	b.WriteString(`</svg>`)
@@ -787,7 +808,7 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 
 	labels := map[string]string{
 		"working": "Working", "thinking": "Thinking", "compacting": "Compacting",
-		"shipped": "Shipped", "notification": "Waiting", "idle": "Idle",
+		"shipped": "Shipped", "notification": "Waiting", "idle": "Idle", "dual": "Dual",
 	}
 	tabs := make([]statusTab, 0, len(config.Statuses))
 	for _, k := range config.Statuses {
@@ -803,6 +824,16 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 	if previewSt.CurrentTool == "" {
 		previewSt.CurrentTool = "edit_file"
 		previewSt.CurrentFile = "main.go"
+	}
+	previewApp := cfg.AppName
+	if selStatus == "dual" {
+		previewApp = "Antigravity & Claude"
+		if previewSt.AgySession == nil {
+			previewSt.AgySession = &state.SessionSnapshot{Cwd: previewSt.Cwd, Model: "gemini-4-neon-high", CurrentFile: "server.go", Status: "working"}
+		}
+		if previewSt.ClaudeSession == nil {
+			previewSt.ClaudeSession = &state.SessionSnapshot{Cwd: previewSt.Cwd, Model: "claude-opus-4-6", CurrentFile: "app.go", Status: "working"}
+		}
 	}
 	vars := format.BuildVars(previewSt, cfg, agg)
 
@@ -822,6 +853,8 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 
 	sampleKeys := []string{
 		"project", "modelPretty", "sourcePretty", "sourcesActiveLabel",
+		"dualTargets", "dualModels", "dualProjects", "dualFiles",
+		"agyFile", "claudeFile", "agyModel", "claudeModel",
 		"currentToolPretty", "currentFilePretty", "fileLang", "gitBranch",
 		"messagesLabel", "tokensLabel", "duration", "todayHours", "weekHours",
 		"allHours", "allTokensFmt", "allCostFmt", "streakLabel", "linesNetFmt",
@@ -837,38 +870,59 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 		Active bool
 	}
 	curImg := cfg.StatusAssets[selStatus]
-	gifs := make([]gifView, 0, len(BuiltinGifs))
+	curClaudeImg := ""
+	if cfg.ClaudeStatusAssets != nil {
+		curClaudeImg = cfg.ClaudeStatusAssets[selStatus]
+	}
+	var agyGifs, claudeGifs, dualGifs []gifView
 	for _, g := range BuiltinGifs {
 		p := "/assets/gifs/" + g.File
-		gifs = append(gifs, gifView{Label: g.Label, Path: p, Active: curImg == p})
+		switch g.Group {
+		case "antigravity":
+			agyGifs = append(agyGifs, gifView{Label: g.Label, Path: p, Active: curImg == p})
+			dualGifs = append(dualGifs, gifView{Label: "Agy " + g.Label, Path: p, Active: curImg == p})
+		case "claude":
+			claudeGifs = append(claudeGifs, gifView{Label: g.Label, Path: p, Active: curClaudeImg == p})
+		case "dual":
+			// Place Dual Wielding GIF first in the Dual gallery
+			dualGifs = append([]gifView{{Label: "Dual Wield", Path: p, Active: curImg == p}}, dualGifs...)
+		}
 	}
 
+	varsJSONBytes, _ := json.Marshal(vars)
+	// Prevent accidental </script> breakout inside JSON data block
+	varsJSONSafe := strings.ReplaceAll(string(varsJSONBytes), "</", `<\/`)
+
 	data := map[string]any{
-		"Saved":           r.URL.Query().Get("saved") == "1",
-		"Error":           r.URL.Query().Get("err"),
-		"ConfigPath":      paths.ConfigPath(),
-		"LogPath":         paths.LogPath(),
-		"LogTail":         logTail,
-		"DaemonDot":       dDot,
-		"DaemonTitle":     dTitle,
-		"DaemonSub":       dSub,
-		"Status":          selStatus,
-		"StatusTabs":      tabs,
-		"PreviewAppName":  cfg.AppName,
-		"PreviewImage":    presence.ResolveLargeImageKey(cfg, selStatus, previewSt.Model),
-		"PreviewDetails":  format.FillTemplate(stTpl.Details, vars),
-		"PreviewState":    format.FillTemplate(stTpl.State, vars),
-		"StatusDetails":   stTpl.Details,
-		"StatusState":     stTpl.State,
-		"StatusImage":     curImg,
-		"StatusLargeText": stTpl.LargeImageText,
-		"BuiltinGifs":     gifs,
-		"Frames":          frames,
-		"Buttons":         btns,
-		"VarSamples":      samples,
-		"Cfg":             cfg,
-		"RotationSec":     cfg.RotationIntervalMs / 1000,
-		"Workspaces":      discoverWorkspaces(cfg),
+		"Saved":             r.URL.Query().Get("saved") == "1",
+		"Error":             r.URL.Query().Get("err"),
+		"ConfigPath":        paths.ConfigPath(),
+		"LogPath":           paths.LogPath(),
+		"LogTail":           logTail,
+		"DaemonDot":         dDot,
+		"DaemonTitle":       dTitle,
+		"DaemonSub":         dSub,
+		"Status":            selStatus,
+		"StatusTabs":        tabs,
+		"PreviewAppName":    previewApp,
+		"PreviewImage":      presence.ResolveLargeImageKey(cfg, selStatus, previewSt.Model),
+		"PreviewDetails":    format.FillTemplate(stTpl.Details, vars),
+		"PreviewState":      format.FillTemplate(stTpl.State, vars),
+		"PreviewVarsJSON":   template.JS(varsJSONSafe),
+		"StatusDetails":     stTpl.Details,
+		"StatusState":       stTpl.State,
+		"StatusImage":       curImg,
+		"ClaudeStatusImage": curClaudeImg,
+		"StatusLargeText":   stTpl.LargeImageText,
+		"BuiltinAgyGifs":    agyGifs,
+		"BuiltinClaudeGifs": claudeGifs,
+		"DualGifs":          dualGifs,
+		"Frames":            frames,
+		"Buttons":           btns,
+		"VarSamples":        samples,
+		"Cfg":               cfg,
+		"RotationSec":       cfg.RotationIntervalMs / 1000,
+		"Workspaces":        discoverWorkspaces(cfg),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = settingsTpl.Execute(w, data)
@@ -892,6 +946,12 @@ func parseSettingsForm(r *http.Request, base config.Config) (config.Config, stri
 
 	if img := strings.TrimSpace(r.FormValue("status_image")); img != "" {
 		edited.StatusAssets[selStatus] = img
+	}
+	if cImg := strings.TrimSpace(r.FormValue("claude_status_image")); cImg != "" && selStatus != "dual" {
+		if edited.ClaudeStatusAssets == nil {
+			edited.ClaudeStatusAssets = map[string]string{}
+		}
+		edited.ClaudeStatusAssets[selStatus] = cImg
 	}
 
 	// Frames
@@ -987,7 +1047,23 @@ func handleSettingsSave(w http.ResponseWriter, r *http.Request) {
 func handleSettingsGifPick(w http.ResponseWriter, r *http.Request) {
 	base := config.Load()
 	edited, selStatus := parseSettingsForm(r, base)
-	if gifPath := strings.TrimSpace(r.FormValue("gif_path")); strings.HasPrefix(gifPath, "/assets/gifs/") {
+	pick := strings.TrimSpace(r.FormValue("gif_pick"))
+	if pick != "" {
+		target, gifPath, ok := strings.Cut(pick, ":")
+		if ok && strings.HasPrefix(gifPath, "/assets/gifs/") {
+			if target == "claude" && selStatus != "dual" {
+				if edited.ClaudeStatusAssets == nil {
+					edited.ClaudeStatusAssets = map[string]string{}
+				}
+				edited.ClaudeStatusAssets[selStatus] = gifPath
+			} else {
+				if edited.StatusAssets == nil {
+					edited.StatusAssets = map[string]string{}
+				}
+				edited.StatusAssets[selStatus] = gifPath
+			}
+		}
+	} else if gifPath := strings.TrimSpace(r.FormValue("gif_path")); strings.HasPrefix(gifPath, "/assets/gifs/") {
 		if edited.StatusAssets == nil {
 			edited.StatusAssets = map[string]string{}
 		}

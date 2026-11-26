@@ -8,6 +8,15 @@
   <link rel="stylesheet" href="/assets/dashboard.css">
 </head>
 <body>
+  <div class="bg-scene" aria-hidden="true">
+    <div class="bg-parallax mist">
+      <div class="bg-mist one"></div>
+      <div class="bg-mist two"></div>
+    </div>
+    <div class="bg-parallax dots">
+      <div class="bg-dots"></div>
+    </div>
+  </div>
   <div class="page">
     <header class="topbar">
       <a class="brand" href="/">
@@ -320,5 +329,22 @@
     <div class="kv"><span class="k">Code churn</span><span class="v">+{{.SelectedProject.Added}} / -{{.SelectedProject.Removed}}</span></div>
   </aside>
   {{end}}
+  <script>
+  (function(){
+    var key = 'agy_scroll:' + location.pathname;
+    var savedY = sessionStorage.getItem(key);
+    if (savedY !== null) {
+      sessionStorage.removeItem(key);
+      var y = parseInt(savedY, 10);
+      if (!isNaN(y) && y > 0) window.scrollTo({ top: y, behavior: 'instant' });
+    }
+    var saveScroll = function(){ sessionStorage.setItem(key, String(window.scrollY)); };
+    window.addEventListener('beforeunload', saveScroll);
+    document.addEventListener('click', function(e){
+      var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+      if (a && a.origin === location.origin && a.pathname === location.pathname) saveScroll();
+    });
+  })();
+  </script>
 </body>
 </html>

@@ -152,7 +152,7 @@ func Run() error {
 	pushTicker := time.NewTicker(time.Duration(updateMs) * time.Millisecond)
 	defer pushTicker.Stop()
 
-	liveTicker := time.NewTicker(10 * time.Second)
+	liveTicker := time.NewTicker(5 * time.Second)
 	defer liveTicker.Stop()
 
 	rescanSec := r.cfg.RescanIntervalSec
@@ -443,13 +443,26 @@ func (r *Runner) resolvePresence() (state.SessionState, config.Config, *scanner.
 		st = state.Read("")
 	}
 
-	st.LiveSessions = live
+	// Filter out transcripts belonging to an agent whose OS process is confirmed closed.
+	var filteredLive []state.LiveSession
+	for _, ls := range live {
+		if ls.Source == "claude" && agents.Claude != nil && !*agents.Claude {
+			continue
+		}
+		if ls.Source != "claude" && agents.Antigravity != nil && !*agents.Antigravity {
+			continue
+		}
+		filteredLive = append(filteredLive, ls)
+	}
+	st.LiveSessions = filteredLive
 	lc := picked.LiveCount
 	st.LiveCount = &lc
 	if agents.Any != nil {
 		st.AgentProcessAlive = agents.Any
 	}
-	st.AntigravityActive, st.ClaudeActive = presence.ComputeActiveSources(sessions, live, agents.Antigravity, agents.Claude, cfg, now)
+	st.AntigravityActive, st.ClaudeActive = presence.ComputeActiveSources(sessions, filteredLive, agents.Antigravity, agents.Claude, cfg, now)
+	st.SourcesComputed = true
+	st.AgySession, st.ClaudeSession = presence.PickDualSnapshots(sessions, filteredLive, cfg, now)
 
 	// Enrich live session tokens & model from transcript
 	if st.TranscriptPath != "" {
@@ -459,6 +472,11 @@ func (r *Runner) resolvePresence() (state.SessionState, config.Config, *scanner.
 			}
 			if mdl != "" {
 				st.Model = mdl
+				if st.Source == "claude" && st.ClaudeSession != nil {
+					st.ClaudeSession.Model = mdl
+				} else if st.Source != "claude" && st.AgySession != nil {
+					st.AgySession.Model = mdl
+				}
 			}
 		}
 	}
@@ -466,6 +484,9 @@ func (r *Runner) resolvePresence() (state.SessionState, config.Config, *scanner.
 	st = format.ApplyIdle(st, cfg)
 	st = format.ApplyShipped(st, cfg)
 	st = format.ApplyTrigger(st, cfg)
+	if presence.IsDualWorking(st) {
+		st.Status = "dual"
+	}
 	st = privacy.Apply(st, cfg)
 
 	return st, cfg, agg
@@ -546,7 +567,14 @@ func BuildActivity(st state.SessionState, cfg config.Config, agg *scanner.Aggreg
 
 	// Buttons (max 2)
 	var btns []discord.Button
-	if presence.ShouldShowGithubButton(cfg, st) {
+	hasCustomGithub := false
+	for _, b := range cfg.Presence.Buttons {
+		if strings.Contains(strings.ToLower(b.URL), "github.com") {
+			hasCustomGithub = true
+			break
+		}
+	}
+	if !hasCustomGithub && presence.ShouldShowGithubButton(cfg, st) {
 		if gh := gitinfo.GithubURL(st.Cwd); gh != "" {
 			btns = append(btns, discord.Button{Label: "View on GitHub →", URL: gh})
 		}

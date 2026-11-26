@@ -59,9 +59,32 @@ func TestComputeActiveSources(t *testing.T) {
 
 	// Running OS processes should also trigger both
 	tTrue := true
+	tFalse := false
 	agy, cc = ComputeActiveSources(nil, nil, &tTrue, &tTrue, cfg, now)
 	if !agy || !cc {
 		t.Fatalf("expected both active from OS processes, got agy=%v cc=%v", agy, cc)
+	}
+
+	// Once Claude OS process exits (claudeProc=false), lingering recent sessions/transcripts must NOT keep Claude active.
+	sessions[1].ClaudeClosed = false
+	live := []state.LiveSession{
+		{Source: "antigravity", Mtime: now - 2_000},
+		{Source: "claude", Mtime: now - 3_000},
+	}
+	agy, cc = ComputeActiveSources(sessions, live, &tTrue, &tFalse, cfg, now)
+	if !agy || cc {
+		t.Fatalf("expected claude=false when claudeProc=false despite recent session/transcript, got agy=%v cc=%v", agy, cc)
+	}
+	st := state.SessionState{
+		Source:            "antigravity",
+		Status:            "working",
+		LiveSessions:      live,
+		AntigravityActive: agy,
+		ClaudeActive:      cc,
+		SourcesComputed:   true,
+	}
+	if got := ResolveAppName(st, cfg); got != "Antigravity" {
+		t.Fatalf("expected Antigravity after Claude closes, got %q", got)
 	}
 }
 
@@ -74,7 +97,41 @@ func TestResolveDiscordImageKey(t *testing.T) {
 	}
 
 	gotCC := ResolveDiscordImageKey(cfg, "claude", "working", "claude-sonnet-4-6")
-	if gotCC != wantAgy {
-		t.Fatalf("expected Antigravity GIF fallback for Claude too (%q), got %q", wantAgy, gotCC)
+	wantCC := config.DefaultGifBaseURL + "/claude-working.gif"
+	if gotCC != wantCC {
+		t.Fatalf("expected custom Claude GIF (%q), got %q", wantCC, gotCC)
+	}
+
+	gotDual := ResolveDiscordImageKey(cfg, "antigravity", "dual", "gemini-4-neon-high")
+	wantDual := config.DefaultGifBaseURL + "/agy-dual.gif"
+	if gotDual != wantDual {
+		t.Fatalf("expected Dual Wielding GIF (%q), got %q", wantDual, gotDual)
+	}
+}
+
+func TestDualWieldingDetection(t *testing.T) {
+	cfg := config.Default()
+	now := int64(1_700_000_000_000)
+	sessions := []state.SessionState{
+		{Source: "antigravity", Status: "working", Cwd: "/tmp/agy-rpc", Model: "gemini-4-neon-high", CurrentFile: "server.go", LastActivity: now - 2_000},
+		{Source: "claude", Status: "working", Cwd: "/tmp/web-app", Model: "claude-opus-4-6", CurrentFile: "app.go", LastActivity: now - 3_000},
+	}
+	agySnap, ccSnap := PickDualSnapshots(sessions, nil, cfg, now)
+	if agySnap == nil || ccSnap == nil {
+		t.Fatalf("expected both snapshots, got agy=%v cc=%v", agySnap, ccSnap)
+	}
+	if agySnap.CurrentFile != "server.go" || ccSnap.CurrentFile != "app.go" {
+		t.Fatalf("unexpected files: agy=%q cc=%q", agySnap.CurrentFile, ccSnap.CurrentFile)
+	}
+	st := state.SessionState{
+		Source:            "antigravity",
+		Status:            "working",
+		AntigravityActive: true,
+		ClaudeActive:      true,
+		AgySession:        agySnap,
+		ClaudeSession:     ccSnap,
+	}
+	if !IsDualWorking(st) {
+		t.Fatal("expected IsDualWorking=true when both agents are active & working")
 	}
 }

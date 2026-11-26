@@ -8,6 +8,15 @@
   <link rel="stylesheet" href="/assets/settings.css">
 </head>
 <body class="settings">
+  <div class="bg-scene" aria-hidden="true">
+    <div class="bg-parallax mist">
+      <div class="bg-mist one"></div>
+      <div class="bg-mist two"></div>
+    </div>
+    <div class="bg-parallax dots">
+      <div class="bg-dots"></div>
+    </div>
+  </div>
   <div class="page">
     <header class="topbar">
       <a class="brand" href="/">
@@ -98,28 +107,89 @@
             <input type="text" name="status_state" value="{{.StatusState}}" placeholder="{currentToolPretty} · {currentFilePretty}">
           </label>
           <label class="field">
-            Image URL or Discord asset key
-            <input type="text" name="status_image" value="{{.StatusImage}}" placeholder="/assets/gifs/agy-working.gif or https://...">
-          </label>
-          <label class="field">
             Image hover text
-            <input type="text" name="status_large_text" value="{{.StatusLargeText}}" placeholder="Working on a {fileLang} file">
+            <input type="text" name="status_large_text" value="{{.StatusLargeText}}" placeholder="Working in {project} · {modelPretty}">
           </label>
+          {{if eq .Status "dual"}}
+          <label class="field">
+            Dual Wielding GIF URL or asset key
+            <input type="text" name="status_image" value="{{.StatusImage}}" placeholder="/assets/gifs/agy-dual.gif or https://...">
+          </label>
+          {{else}}
+          <div class="field">
+            <span>Discord GIFs for "{{.Status}}"</span>
+            <span class="set-hint">Configure Antigravity &amp; Claude Code GIFs side-by-side below.</span>
+          </div>
+          {{end}}
         </div>
 
+        {{if eq .Status "dual"}}
         <div class="sub-head">
-          <h3>Antigravity Discord GIFs</h3>
-          <span class="set-hint">Pick any animated Antigravity GIF for "{{.Status}}" — served live to Discord automatically via jsDelivr CDN.</span>
+          <h3>Dual Wielding Discord GIF</h3>
+          <span class="set-hint">Shown when Antigravity &amp; Claude Code are both working simultaneously</span>
         </div>
         <div class="gif-gallery">
-          {{range .BuiltinGifs}}
+          {{range .DualGifs}}
             <div class="gif-tile {{if .Active}}active{{end}}">
               <img src="{{.Path}}" alt="{{.Label}}">
               <div class="g-name">{{.Label}}</div>
-              <button type="submit" formaction="/settings/gif/pick" name="gif_path" value="{{.Path}}">{{if .Active}}Active{{else}}Use{{end}}</button>
+              <button type="submit" formaction="/settings/gif/pick" name="gif_pick" value="antigravity:{{.Path}}">{{if .Active}}Active{{else}}Use{{end}}</button>
             </div>
           {{end}}
         </div>
+        {{else}}
+        <div class="sub-head">
+          <h3>Status GIFs (Antigravity &amp; Claude Code)</h3>
+          <span class="set-hint">Antigravity uses the left GIF; Claude-only sessions use the right GIF</span>
+        </div>
+        <div class="gif-pair">
+          <div class="gif-panel">
+            <div class="gif-panel-head">
+              <div class="gif-panel-thumb">{{if .StatusImage}}<img src="{{.StatusImage}}" alt="Antigravity GIF">{{end}}</div>
+              <div>
+                <div class="gif-panel-title">Antigravity</div>
+                <div class="gif-panel-sub">Shown for Antigravity sessions</div>
+              </div>
+            </div>
+            <label class="field">
+              GIF URL or asset key
+              <input type="text" name="status_image" value="{{.StatusImage}}" placeholder="/assets/gifs/agy-working.gif or https://...">
+            </label>
+            <div class="gif-gallery compact">
+              {{range .BuiltinAgyGifs}}
+                <div class="gif-tile {{if .Active}}active{{end}}">
+                  <img src="{{.Path}}" alt="{{.Label}}">
+                  <div class="g-name">{{.Label}}</div>
+                  <button type="submit" formaction="/settings/gif/pick" name="gif_pick" value="antigravity:{{.Path}}">{{if .Active}}Active{{else}}Use{{end}}</button>
+                </div>
+              {{end}}
+            </div>
+          </div>
+
+          <div class="gif-panel">
+            <div class="gif-panel-head">
+              <div class="gif-panel-thumb">{{if .ClaudeStatusImage}}<img src="{{.ClaudeStatusImage}}" alt="Claude Code GIF">{{end}}</div>
+              <div>
+                <div class="gif-panel-title">Claude Code</div>
+                <div class="gif-panel-sub">Shown for Claude-only sessions</div>
+              </div>
+            </div>
+            <label class="field">
+              GIF URL or asset key
+              <input type="text" name="claude_status_image" value="{{.ClaudeStatusImage}}" placeholder="/assets/gifs/claude-working.gif or https://...">
+            </label>
+            <div class="gif-gallery compact">
+              {{range .BuiltinClaudeGifs}}
+                <div class="gif-tile {{if .Active}}active{{end}}">
+                  <img src="{{.Path}}" alt="{{.Label}}">
+                  <div class="g-name">{{.Label}}</div>
+                  <button type="submit" formaction="/settings/gif/pick" name="gif_pick" value="claude:{{.Path}}">{{if .Active}}Active{{else}}Use{{end}}</button>
+                </div>
+              {{end}}
+            </div>
+          </div>
+        </div>
+        {{end}}
 
         <details class="vars-details">
           <summary>Template variables (click to inspect live values)</summary>
@@ -195,7 +265,7 @@
 
         <div class="sub-head">
           <h3>Custom Buttons (max 2)</h3>
-          <span class="set-hint">Shown on your Discord profile card</span>
+          <span class="set-hint">Visible to other Discord users viewing your profile (Discord hides RPC buttons on your own profile view)</span>
         </div>
         {{range .Buttons}}
           <div class="button-row">
@@ -288,8 +358,58 @@
 
     <footer>
       <span>Config: {{.ConfigPath}}</span>
-      <span>Pure Go SSR · Zero JavaScript</span>
+      <span>Go SSR · Progressive Enhancement</span>
     </footer>
   </div>
+  <script type="application/json" id="pv-vars">{{.PreviewVarsJSON}}</script>
+  <script>
+  (function(){
+    var key = 'agy_scroll:' + location.pathname;
+    var savedY = sessionStorage.getItem(key);
+    if (savedY !== null) {
+      sessionStorage.removeItem(key);
+      var y = parseInt(savedY, 10);
+      if (!isNaN(y) && y > 0) window.scrollTo({ top: y, behavior: 'instant' });
+    }
+    var saveScroll = function(){ sessionStorage.setItem(key, String(window.scrollY)); };
+    document.addEventListener('submit', saveScroll);
+    document.addEventListener('click', function(e){
+      var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+      if (a && a.origin === location.origin && a.pathname === location.pathname) saveScroll();
+    });
+    var el = document.getElementById('pv-vars');
+    if (!el) return;
+    var vars = JSON.parse(el.textContent || '{}');
+    var fill = function(tpl) {
+      if (!tpl) return '';
+      var out = tpl.replace(/\{(\w+)\}/g, function(m, k) {
+        return Object.prototype.hasOwnProperty.call(vars, k) && vars[k] != null ? String(vars[k]) : m;
+      });
+      if (out.indexOf('·') === -1) return out.trim();
+      return out.split('·').map(function(s){ return s.trim(); }).filter(Boolean).join(' · ');
+    };
+    var detIn = document.querySelector('input[name="status_details"]');
+    var stIn  = document.querySelector('input[name="status_state"]');
+    var ltIn  = document.querySelector('input[name="status_large_text"]');
+    var imgIn = document.querySelector('input[name="status_image"]');
+    var appIn = document.querySelector('input[name="appName"]');
+    var pvDet = document.querySelector('.pv-details');
+    var pvSt  = document.querySelector('.pv-state');
+    var pvApp = document.querySelector('.pv-app');
+    var pvImg = document.querySelector('.preview .avatar img');
+    var isDual = {{if eq .Status "dual"}}true{{else}}false{{end}};
+    var sync = function() {
+      if (detIn && pvDet) pvDet.textContent = fill(detIn.value);
+      if (stIn  && pvSt)  pvSt.textContent  = fill(stIn.value);
+      if (ltIn  && pvImg) pvImg.title       = fill(ltIn.value);
+      if (appIn && pvApp && !isDual && appIn.value.trim()) pvApp.textContent = appIn.value.trim();
+      if (imgIn && pvImg && imgIn.value.trim()) {
+        var u = imgIn.value.trim();
+        if (u.indexOf('http://') === 0 || u.indexOf('https://') === 0 || u.indexOf('/assets/') === 0) pvImg.src = u;
+      }
+    };
+    [detIn, stIn, ltIn, imgIn, appIn].forEach(function(inp){ if (inp) inp.addEventListener('input', sync); });
+  })();
+  </script>
 </body>
 </html>

@@ -178,10 +178,10 @@ func (c Config) Clone() Config {
 
 const (
 	DefaultClientID   = "1506443909406920948"
-	DefaultGifBaseURL = "https://raw.githubusercontent.com/chauveaul/agy-rpc/main/internal/server/assets/gifs"
+	DefaultGifBaseURL = "https://cdn.jsdelivr.net/gh/chauveaul/agy-rpc@main/internal/server/assets/gifs"
 )
 
-var Statuses = []string{"working", "thinking", "compacting", "shipped", "notification", "idle"}
+var Statuses = []string{"working", "thinking", "compacting", "shipped", "notification", "idle", "dual"}
 
 func Default() Config {
 	return Config{
@@ -220,6 +220,16 @@ func Default() Config {
 			"idle":         "/assets/gifs/agy-idle.gif",
 			"stale":        "/assets/gifs/agy-stale.gif",
 			"notification": "/assets/gifs/agy-notification.gif",
+			"dual":         "/assets/gifs/agy-dual.gif",
+		},
+		ClaudeStatusAssets: map[string]string{
+			"working":      "/assets/gifs/claude-working.gif",
+			"thinking":     "/assets/gifs/claude-thinking.gif",
+			"compacting":   "/assets/gifs/claude-compacting.gif",
+			"shipped":      "/assets/gifs/claude-shipped.gif",
+			"idle":         "/assets/gifs/claude-idle.gif",
+			"stale":        "/assets/gifs/claude-stale.gif",
+			"notification": "/assets/gifs/claude-notification.gif",
 		},
 		Presence: PresenceConfig{
 			LargeImageKey:  "/assets/gifs/agy-idle.gif",
@@ -275,6 +285,11 @@ func Default() Config {
 						{Details: "Monthly budget", State: "{budgetLabel}", Requires: Requires{"budgetLabel"}},
 					},
 				},
+				"dual": {
+					Details:        "Dual wielding · {dualTargets}",
+					State:          "{dualModels} · {tokensLabel}",
+					LargeImageText: "Antigravity + Claude Code · {dualProjects}",
+				},
 			},
 		},
 		StatusIcons: map[string]string{
@@ -282,6 +297,7 @@ func Default() Config {
 			"thinking":     "thinking",
 			"compacting":   "thinking",
 			"shipped":      "working",
+			"dual":         "working",
 			"idle":         "idle",
 			"notification": "",
 			"stale":        "",

@@ -9,3 +9,4 @@ config.json
 *.svg
 !assets/vibe-rpc-icon.png
 !assets/vibe-rpc-icon.svg
+/dist/

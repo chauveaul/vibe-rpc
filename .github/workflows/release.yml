@@ -1,0 +1,68 @@
+name: Release
+
+# Push a version tag to publish:  git tag v2.1.0 && git push origin v2.1.0
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # create the GitHub release and upload assets
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # GoReleaser needs history for the changelog
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build and publish release
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Publishes Formula/vibe-rpc.rb to chauveaul/homebrew-tap over SSH using
+      # a write-enabled deploy key scoped to that repo only (private half in
+      # the HOMEBREW_TAP_DEPLOY_KEY secret). Skipped with a warning if unset,
+      # and for prereleases like v2.1.0-rc.1.
+      - name: Update Homebrew tap
+        if: ${{ !contains(github.ref_name, '-') }}
+        env:
+          DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          if [ -z "$DEPLOY_KEY" ]; then
+            echo "::warning::HOMEBREW_TAP_DEPLOY_KEY is not set; skipping the Homebrew tap update."
+            exit 0
+          fi
+          eval "$(ssh-agent -s)"
+          trap 'ssh-agent -k >/dev/null' EXIT
+          printf '%s\n' "$DEPLOY_KEY" | ssh-add - >/dev/null
+          # Pin GitHub's published host key (api.github.com/meta) instead of trusting on first use.
+          echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > "$RUNNER_TEMP/known_hosts"
+          export GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=$RUNNER_TEMP/known_hosts -o StrictHostKeyChecking=yes -o IdentitiesOnly=no"
+
+          git clone --depth 1 git@github.com:chauveaul/homebrew-tap.git tap
+          mkdir -p tap/Formula
+          sh scripts/homebrew-formula.sh "$VERSION" dist > tap/Formula/vibe-rpc.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/vibe-rpc.rb
+          if git diff --cached --quiet; then
+            echo "Formula already up to date."
+            exit 0
+          fi
+          git commit -m "vibe-rpc ${VERSION#v}"
+          git push origin HEAD:main

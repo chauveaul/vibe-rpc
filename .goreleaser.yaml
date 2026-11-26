@@ -1,0 +1,65 @@
+# GoReleaser config for vibe-rpc. Releases are cut by pushing a v* tag; see
+# .github/workflows/release.yml. Asset names are a contract with
+# `vibe-rpc upgrade` (internal/update) and install.sh, so keep the defaults:
+#   vibe-rpc_<version>_<os>_<arch>.tar.gz  (.zip on Windows, darwin_all universal)
+#   vibe-rpc_<version>_checksums.txt
+version: 2
+
+project_name: vibe-rpc
+
+builds:
+  - id: vibe-rpc
+    main: ./cmd/vibe-rpc
+    binary: vibe-rpc
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/chauveaul/vibe-rpc/internal/paths.Version={{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+# One macOS binary for Intel + Apple Silicon (named darwin_all).
+universal_binaries:
+  - id: vibe-rpc
+    replace: true
+
+archives:
+  - id: vibe-rpc
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+release:
+  github:
+    owner: chauveaul
+    name: vibe-rpc
+  prerelease: auto
+  footer: |
+    ## Install
+
+    ```sh
+    brew install chauveaul/tap/vibe-rpc
+    # or
+    curl -fsSL https://raw.githubusercontent.com/chauveaul/vibe-rpc/main/install.sh | sh
+    ```
+
+    Already installed? Run `vibe-rpc upgrade`. Then `vibe-rpc setup` wires hooks and starts the daemon.

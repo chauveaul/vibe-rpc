@@ -27,7 +27,42 @@ Built to match the functionality, paper-and-ink aesthetic, customizability, and 
 - **Shareable SVG Stat Cards & Exports**
   - `vibe-rpc badge`, `vibe-rpc card`, `vibe-rpc calendar`, `vibe-rpc session-card`, `vibe-rpc export --csv`, `vibe-rpc recap`, `vibe-rpc statusline`.
 
-## Build & Install
+## Install
+
+**Homebrew** (macOS and Linux):
+
+```bash
+brew install chauveaul/tap/vibe-rpc
+```
+
+**Install script** (macOS and Linux). It downloads the latest release, verifies its SHA-256 checksum, and installs to `~/.local/bin`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/chauveaul/vibe-rpc/main/install.sh | sh
+```
+
+Set `VIBE_RPC_VERSION=2.1.0` to pin a version or `VIBE_RPC_INSTALL_DIR=/usr/local/bin` to change where it goes.
+
+**Windows:** download the `.zip` for your CPU from [Releases](https://github.com/chauveaul/vibe-rpc/releases) and put `vibe-rpc.exe` on your `PATH`.
+
+Then run one-time setup:
+
+```bash
+vibe-rpc setup
+```
+
+This seeds your config, wires Antigravity & Claude Code hooks, runs an in-process hook self-test, installs OS login autostart, scans your transcript history, and starts the background daemon.
+
+### Updating
+
+```bash
+vibe-rpc upgrade          # install the latest release (restarts the daemon)
+vibe-rpc upgrade --check  # just check
+```
+
+Homebrew installs update with `brew upgrade vibe-rpc` instead.
+
+### Build from source
 
 Requires Go 1.26+.
 
@@ -37,13 +72,15 @@ go build -o vibe-rpc ./cmd/vibe-rpc
 go install ./cmd/vibe-rpc
 ```
 
-Then run one-time setup:
+### Releasing (maintainers)
+
+Push a version tag and GitHub Actions does the rest (tests, GoReleaser builds for macOS universal / Linux / Windows on amd64 + arm64, checksums, GitHub release, Homebrew tap formula):
 
 ```bash
-./vibe-rpc setup
+git tag v2.1.0 && git push origin v2.1.0
 ```
 
-This seeds your config, wires Antigravity & Claude Code hooks, runs an in-process hook self-test, installs OS login autostart, scans your transcript history, and starts the background daemon.
+Dry run locally with `goreleaser release --snapshot --clean`.
 
 ## Commands
 
@@ -65,6 +102,7 @@ This seeds your config, wires Antigravity & Claude Code hooks, runs an in-proces
 | `vibe-rpc statcards [badge\|card\|calendar\|session-card]` | Render shareable SVGs |
 | `vibe-rpc mcp [install\|uninstall]` | Stdio MCP server / Antigravity registration |
 | `vibe-rpc start\|stop\|restart\|logs` | Daemon controls |
+| `vibe-rpc upgrade [--check]` | Update to the latest GitHub release |
 | `vibe-rpc uninstall` | Remove hooks, MCP config, autostart, and stop daemon |
 
 ## Key Go Libraries

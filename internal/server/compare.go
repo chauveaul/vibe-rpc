@@ -293,6 +293,7 @@ func listRunning(cfg config.Config, discordID string) []runningView {
 		IncludeAntigravity: cfg.Sources.WantAntigravity(),
 		IncludeClaude:      cfg.Sources.WantClaude(),
 		IncludeOpenCode:    cfg.Sources.WantOpenCode(),
+		IncludeCodex:       cfg.Sources.WantCodex(),
 		IncludeClaudeRPC:   true,
 	})
 	now := time.Now().UnixMilli()
@@ -333,6 +334,8 @@ func listRunning(cfg config.Config, discordID string) []runningView {
 			}
 		case "opencode":
 			v.SourceKey, v.Source = "opencode", "OpenCode"
+		case "codex":
+			v.SourceKey, v.Source = "codex", "Codex"
 		}
 		if s.Cwd != "" {
 			v.Project, v.Path = filepath.Base(s.Cwd), s.Cwd

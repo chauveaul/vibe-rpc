@@ -146,3 +146,37 @@ func TestOpenCodeEvents(t *testing.T) {
 		t.Fatalf("question: %+v", st)
 	}
 }
+
+func TestCodexEvents(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("VIBE_RPC_STATE_DIR", tmp)
+	t.Setenv("VIBE_RPC_DATA_DIR", filepath.Join(tmp, "data"))
+	t.Setenv("VIBE_RPC_NO_AUTOSTART", "1")
+	run := func(event, body string) string {
+		var out bytes.Buffer
+		RunCLI(event, "codex", bytes.NewBufferString(body), &out)
+		return out.String()
+	}
+	// Codex must never get a decision back (an "allow" could skip its approval).
+	if out := run("PreToolUse", `{"session_id":"cx1","cwd":"/w/api","model":"gpt-5.5-codex","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"go test ./..."}}`); strings.TrimSpace(out) != "{}" {
+		t.Fatalf("codex hook output = %q, want {}", out)
+	}
+	st := state.Read("cx1")
+	if st.Source != "codex" || st.Status != "working" || st.LastBashCommand != "go test ./..." || st.Model != "gpt-5.5-codex" {
+		t.Fatalf("bash event: %+v", st)
+	}
+	run("PreToolUse", `{"session_id":"cx1","cwd":"/w/api","tool_name":"apply_patch","tool_input":{"input":"*** Begin Patch\n*** Update File: internal/server.go\n+x\n*** End Patch"}}`)
+	if st := state.Read("cx1"); st.CurrentFile != "server.go" {
+		t.Fatalf("apply_patch file = %q", st.CurrentFile)
+	}
+	run("PermissionRequest", `{"session_id":"cx1","cwd":"/w/api","tool_name":"Bash","tool_input":{"command":"rm -rf build","description":"Delete the build folder"}}`)
+	st = state.Read("cx1")
+	if st.Status != "notification" || st.AttentionKind != "permission" || st.AttentionText != "Codex needs your permission: Delete the build folder" {
+		t.Fatalf("permission: %+v", st)
+	}
+	run("PostToolUse", `{"session_id":"cx1","cwd":"/w/api","tool_name":"Bash","tool_input":{"command":"rm -rf build"}}`)
+	run("Stop", `{"session_id":"cx1","cwd":"/w/api","stop_hook_active":false}`)
+	if st := state.Read("cx1"); st.Status == "notification" {
+		t.Fatalf("approval should clear the alert: %+v", st)
+	}
+}

@@ -125,7 +125,7 @@ func main() {
 	}
 
 	// setup / install
-	var noAutostart, noClaude, noOpenCode bool
+	var noAutostart, noClaude, noOpenCode, noCodex bool
 	var agentsFlag string
 	setupCmd := &cobra.Command{
 		Use:     "setup",
@@ -169,6 +169,15 @@ func main() {
 				}
 			}
 
+			if !noCodex && tracked["codex"] {
+				if changed, err := install.InstallCodexHooks(""); err != nil {
+					fmt.Printf("  ! Codex hooks: %v\n", err)
+				} else if changed {
+					fmt.Printf("  ✓ wired Codex hooks in %s (Codex asks you to trust them on next launch)\n", install.CodexHooksPath())
+				} else {
+					fmt.Printf("  · Codex hooks already up to date in %s\n", install.CodexHooksPath())
+				}
+			}
 			if !noOpenCode && tracked["opencode"] && scanner.OpenCodeBinary() != "" {
 				if changed, err := install.InstallOpenCodePlugin(""); err != nil {
 					fmt.Printf("  ! OpenCode plugin: %v\n", err)
@@ -208,7 +217,8 @@ func main() {
 	setupCmd.Flags().BoolVar(&noAutostart, "no-autostart", false, "Skip installing OS login autostart")
 	setupCmd.Flags().BoolVar(&noClaude, "no-claude", false, "Skip wiring Claude Code hooks")
 	setupCmd.Flags().BoolVar(&noOpenCode, "no-opencode", false, "Skip installing the OpenCode plugin")
-	setupCmd.Flags().StringVar(&agentsFlag, "agents", "", "Agents to track, comma-separated: antigravity,claude,opencode (or \"all\"); asks interactively if omitted")
+	setupCmd.Flags().BoolVar(&noCodex, "no-codex", false, "Skip wiring Codex hooks")
+	setupCmd.Flags().StringVar(&agentsFlag, "agents", "", "Agents to track, comma-separated: antigravity,claude,opencode,codex (or \"all\"); asks interactively if omitted")
 
 	// uninstall
 	uninstallCmd := &cobra.Command{
@@ -228,6 +238,9 @@ func main() {
 				fmt.Println("✓ Removed vibe-rpc's Antigravity CLI status line")
 			}
 			notch.Quit()
+			if ok, _ := install.UninstallCodexHooks(); ok {
+				fmt.Println("✓ Removed vibe-rpc's Codex hooks")
+			}
 			if ok, _ := install.UninstallOpenCodePlugin(); ok {
 				fmt.Println("✓ Removed the OpenCode plugin")
 			}
@@ -1123,7 +1136,7 @@ func chooseAgents(flag string, in *os.File, out io.Writer) (map[string]bool, err
 				k = "claude"
 			}
 			if !slices.Contains(config.Agents, k) {
-				return nil, fmt.Errorf("unknown agent %q (use antigravity, claude, opencode)", k)
+				return nil, fmt.Errorf("unknown agent %q (use antigravity, claude, opencode, codex)", k)
 			}
 			tracked[k] = true
 		}

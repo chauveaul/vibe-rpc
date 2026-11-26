@@ -72,6 +72,13 @@ var BuiltinGifs = []struct {
 	{"notification", "opencode", "Waiting", "opencode-notification.gif"},
 	{"idle", "opencode", "Idle", "opencode-idle.gif"},
 	{"stale", "opencode", "Away", "opencode-stale.gif"},
+	{"working", "codex", "Working", "codex-working.gif"},
+	{"thinking", "codex", "Thinking", "codex-thinking.gif"},
+	{"compacting", "codex", "Compacting", "codex-compacting.gif"},
+	{"shipped", "codex", "Shipped", "codex-shipped.gif"},
+	{"notification", "codex", "Waiting", "codex-notification.gif"},
+	{"idle", "codex", "Idle", "codex-idle.gif"},
+	{"stale", "codex", "Away", "codex-stale.gif"},
 }
 
 // ExportGifs writes all embedded Antigravity animated GIFs to dir.
@@ -1077,7 +1084,11 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 	if cfg.OpenCodeStatusAssets != nil {
 		curOCImg = cfg.OpenCodeStatusAssets[selStatus]
 	}
-	var agyGifs, claudeGifs, ocGifs, dualGifs []gifView
+	curCXImg := ""
+	if cfg.CodexStatusAssets != nil {
+		curCXImg = cfg.CodexStatusAssets[selStatus]
+	}
+	var agyGifs, claudeGifs, ocGifs, cxGifs, dualGifs []gifView
 	for _, g := range BuiltinGifs {
 		p := "/assets/gifs/" + g.File
 		switch g.Group {
@@ -1088,6 +1099,8 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 			claudeGifs = append(claudeGifs, gifView{Label: g.Label, Path: p, Active: curClaudeImg == p})
 		case "opencode":
 			ocGifs = append(ocGifs, gifView{Label: g.Label, Path: p, Active: curOCImg == p})
+		case "codex":
+			cxGifs = append(cxGifs, gifView{Label: g.Label, Path: p, Active: curCXImg == p})
 		case "dual":
 			// Place Dual Wielding GIF first in the Dual gallery
 			dualGifs = append([]gifView{{Label: "Dual Wield", Path: p, Active: curImg == p}}, dualGifs...)
@@ -1159,6 +1172,9 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 		"BuiltinAgyGifs":      agyGifs,
 		"BuiltinClaudeGifs":   claudeGifs,
 		"BuiltinOpenCodeGifs": ocGifs,
+		"BuiltinCodexGifs":    cxGifs,
+		"CodexStatusImage":    curCXImg,
+		"ShowCodexGifs":       cfg.Sources.Tracks("codex"),
 		"OpenCodeStatusImage": curOCImg,
 		"ShowOpenCodeGifs":    cfg.Sources.Tracks("opencode"),
 		"DualGifs":            dualGifs,
@@ -1212,6 +1228,12 @@ func parseSettingsForm(r *http.Request, base config.Config) (config.Config, stri
 	if img := strings.TrimSpace(r.FormValue("status_image")); img != "" {
 		edited.StatusAssets[selStatus] = img
 	}
+	if xImg := strings.TrimSpace(r.FormValue("codex_status_image")); xImg != "" && selStatus != "dual" {
+		if edited.CodexStatusAssets == nil {
+			edited.CodexStatusAssets = map[string]string{}
+		}
+		edited.CodexStatusAssets[selStatus] = xImg
+	}
 	if oImg := strings.TrimSpace(r.FormValue("opencode_status_image")); oImg != "" && selStatus != "dual" {
 		if edited.OpenCodeStatusAssets == nil {
 			edited.OpenCodeStatusAssets = map[string]string{}
@@ -1261,8 +1283,8 @@ func parseSettingsForm(r *http.Request, base config.Config) (config.Config, stri
 	edited.Presence.GithubButton = config.BoolPtr(r.FormValue("githubButton") == "on")
 	if r.FormValue("agents_section") == "1" {
 		on := func(k string) *bool { return config.BoolPtr(r.FormValue(k) == "on") }
-		edited.Sources = config.SourcesConfig{Antigravity: on("track_antigravity"), Claude: on("track_claude"), OpenCode: on("track_opencode")}
-		edited.DiscordSources = config.DiscordSourcesConfig{Antigravity: on("discord_antigravity"), Claude: on("discord_claude"), OpenCode: on("discord_opencode")}
+		edited.Sources = config.SourcesConfig{Antigravity: on("track_antigravity"), Claude: on("track_claude"), OpenCode: on("track_opencode"), Codex: on("track_codex")}
+		edited.DiscordSources = config.DiscordSourcesConfig{Antigravity: on("discord_antigravity"), Claude: on("discord_claude"), OpenCode: on("discord_opencode"), Codex: on("discord_codex")}
 	} else if r.FormValue("sourceAntigravity") != "" || r.FormValue("sourceClaude") != "" || r.FormValue("sourceOpenCode") != "" {
 		// Older forms with plain "Track …" checkboxes.
 		edited.Sources = config.SourcesConfig{
@@ -1468,6 +1490,11 @@ func handleSettingsGifPick(w http.ResponseWriter, r *http.Request) {
 					edited.ClaudeStatusAssets = map[string]string{}
 				}
 				edited.ClaudeStatusAssets[selStatus] = gifPath
+			} else if target == "codex" && selStatus != "dual" {
+				if edited.CodexStatusAssets == nil {
+					edited.CodexStatusAssets = map[string]string{}
+				}
+				edited.CodexStatusAssets[selStatus] = gifPath
 			} else if target == "opencode" && selStatus != "dual" {
 				if edited.OpenCodeStatusAssets == nil {
 					edited.OpenCodeStatusAssets = map[string]string{}

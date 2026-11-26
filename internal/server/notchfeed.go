@@ -306,6 +306,7 @@ func listAttention(cfg config.Config, now time.Time) []notchAttention {
 		IncludeAntigravity: cfg.Sources.WantAntigravity(),
 		IncludeClaude:      cfg.Sources.WantClaude(),
 		IncludeOpenCode:    cfg.Sources.WantOpenCode(),
+		IncludeCodex:       cfg.Sources.WantCodex(),
 		IncludeClaudeRPC:   true,
 	}) {
 		if s.Status != "notification" || s.AgentClosed || s.ClaudeClosed {

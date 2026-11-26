@@ -15,7 +15,7 @@ func TestChooseAgentsFlag(t *testing.T) {
 		t.Fatal("unknown agents should error")
 	}
 	all, _ := chooseAgents("all", os.Stdin, io.Discard)
-	if len(all) != 3 {
+	if len(all) != 4 {
 		t.Fatalf("all = %v", all)
 	}
 }

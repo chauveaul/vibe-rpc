@@ -174,6 +174,11 @@ func OutputFor(event, source string) map[string]any {
 	if source == "claude" {
 		return map[string]any{"continue": true}
 	}
+	// Codex reads decisions from hook output (an "allow" could skip its
+	// approval prompt), and OpenCode's plugin ignores output: stay a no-op.
+	if source == "codex" || source == "opencode" {
+		return map[string]any{}
+	}
 	if event == "PreToolUse" {
 		return map[string]any{"decision": "allow"}
 	}
@@ -319,6 +324,9 @@ func ProcessEvent(event string, in Payload, nowMs int64, explicitSource string) 
 	case "PreToolUse":
 		toolName, toolArgs := extractTool(in)
 		file := strArg(toolArgs, "Path", "AbsolutePath", "TargetFile", "file_path", "filePath", "path", "notebook_path")
+		if file == "" && toolName == "apply_patch" { // Codex: files live in the patch text
+			file = firstPatchFile(strArg(toolArgs, "input", "patch", "command"))
+		}
 		shellCmd := ""
 		if toolName == "run_command" || toolName == "Bash" || toolName == "bash" {
 			shellCmd = strArg(toolArgs, "CommandLine", "command")
@@ -484,6 +492,37 @@ func ProcessEvent(event string, in Payload, nowMs int64, explicitSource string) 
 			s.ClaudeClosed = false
 		})
 
+	case "PermissionRequest": // Codex (and Claude Code): waiting on an approval
+		toolName, toolArgs := extractTool(in)
+		what := strArg(toolArgs, "description")
+		if what == "" {
+			what = strArg(toolArgs, "command", "cmd")
+		}
+		if what == "" {
+			what = toolName
+		}
+		agent := "Codex"
+		if source == "claude" {
+			agent = "Claude"
+		}
+		msg := agent + " needs your permission"
+		if what != "" {
+			msg += ": " + what
+		}
+		if len(msg) > 200 {
+			msg = msg[:200]
+		}
+		update(func(s *state.SessionState, _ bool) {
+			s.Status = "notification"
+			s.LastNotification = nowMs
+			s.LastActivity = nowMs
+			s.AttentionKind, s.AttentionText = "permission", msg
+			refreshHostApp(s)
+			s.AgentClosed = false
+			s.ClaudeClosed = false
+		})
+		appendEvent(map[string]any{"type": "notification", "ts": nowMs, "cwd": cwd})
+
 	case "PermissionReplied": // OpenCode: the user answered a permission prompt
 		update(func(s *state.SessionState, _ bool) {
 			if s.Status == "notification" && s.AttentionKind == "permission" {
@@ -592,4 +631,16 @@ func refreshHostApp(s *state.SessionState) {
 		return
 	}
 	s.HostApp, s.HostAppPID = proc.HostApp(int32(os.Getppid()))
+}
+
+// firstPatchFile returns the first file named in a Codex apply_patch body.
+func firstPatchFile(patch string) string {
+	for _, line := range strings.Split(patch, "\n") {
+		for _, p := range []string{"*** Update File: ", "*** Add File: ", "*** Delete File: "} {
+			if strings.HasPrefix(line, p) {
+				return strings.TrimSpace(strings.TrimPrefix(line, p))
+			}
+		}
+	}
+	return ""
 }

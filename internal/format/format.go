@@ -534,6 +534,9 @@ func BuildVars(st state.SessionState, cfg config.Config, agg *scanner.Aggregate)
 	case "claude":
 		source = "claude"
 		sourcePretty = "Claude Code"
+	case "codex":
+		source = "codex"
+		sourcePretty = "Codex"
 	case "opencode":
 		source = "opencode"
 		sourcePretty = "OpenCode"

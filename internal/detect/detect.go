@@ -71,6 +71,18 @@ func find(key string) string {
 		return firstExisting(filepath.Join(h, ".claude", "local", "claude"), filepath.Join(h, ".local", "bin", "claude"), filepath.Join(h, ".claude"))
 	case "opencode":
 		return OpenCodeBinary()
+	case "codex":
+		if p := onPath("codex"); p != "" {
+			return p
+		}
+		app := ""
+		if runtime.GOOS == "darwin" {
+			app = firstExisting("/Applications/Codex.app", filepath.Join(h, "Applications", "Codex.app"))
+		}
+		if app != "" {
+			return app
+		}
+		return firstExisting("/opt/homebrew/bin/codex", "/usr/local/bin/codex", CodexHome())
 	default: // antigravity
 		app := ""
 		if runtime.GOOS == "darwin" {
@@ -94,4 +106,12 @@ func All() []Agent {
 		out = append(out, Agent{Key: k, Name: config.AgentName(k), Installed: w != "", Where: w})
 	}
 	return out
+}
+
+// CodexHome is Codex's data dir ($CODEX_HOME, default ~/.codex).
+func CodexHome() string {
+	if d := os.Getenv("CODEX_HOME"); d != "" {
+		return d
+	}
+	return filepath.Join(home(), ".codex")
 }

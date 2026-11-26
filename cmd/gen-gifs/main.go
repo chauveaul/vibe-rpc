@@ -132,9 +132,24 @@ func sdPrompt(px, py, cx, cy, scale float64, cursorOn bool) float64 {
 	return d
 }
 
+// Signed distance to a pair of curly braces "{ }" (Codex emblem; original art).
+func sdBraces(px, py, cx, cy, scale float64) float64 {
+	brace := func(dir float64) float64 {
+		pts := [][2]float64{{-14, -40}, {-24, -34}, {-24, -8}, {-34, 0}, {-24, 8}, {-24, 34}, {-14, 40}}
+		d := 1e9
+		for i := 0; i+1 < len(pts); i++ {
+			ax, ay := cx+dir*(pts[i][0]-12)*scale, cy+pts[i][1]*scale
+			bx, by := cx+dir*(pts[i+1][0]-12)*scale, cy+pts[i+1][1]*scale
+			d = math.Min(d, sdSegment(px, py, ax, ay, bx, by))
+		}
+		return d - 7.5*scale
+	}
+	return math.Min(brace(1), brace(-1))
+}
+
 type themeSpec struct {
 	name      string
-	kind      string // "antigravity", "claude", "dual", "opencode"
+	kind      string // "antigravity", "claude", "dual", "opencode", "codex"
 	bgTop     rgb
 	bgBot     rgb
 	accentA   rgb
@@ -457,6 +472,26 @@ func renderFrame(spec themeSpec, frame int, pal color.Palette) *image.Paletted {
 					col = addGlow(col, lerpColor(baseG, rgb{255, 248, 240}, sheen), cov)
 				}
 
+			case "codex":
+				rot := math.Sin(theta) * 0.05
+				if spec.mode == "idle" || spec.mode == "stale" {
+					rot = 0
+				}
+				// A gentle breathing scale stands in for rotation on a symmetric glyph.
+				dB := sdBraces(fx, fy, cx, ay, 1.0+rot)
+				if dB > 0 && dB < 22 {
+					glowA := math.Exp(-(dB*dB)/(2*9*9)) * 0.52
+					gradT := math.Max(0, math.Min(1, (fx-(cx-50))/100.0))
+					col = screenGlow(col, lerpColor(spec.accentA, spec.accentB, gradT), glowA)
+				}
+				if dB < 1.5 {
+					cov := 1.0 - smoothstep(-1.2, 1.2, dB)
+					gradY := math.Max(0, math.Min(1, (fy-(ay-44))/90.0))
+					baseG := lerpColor(spec.accentB, spec.accentA, gradY)
+					sheen := math.Max(0, 1.0-gradY*1.6) * 0.45
+					col = addGlow(col, lerpColor(baseG, rgb{246, 243, 255}, sheen), cov)
+				}
+
 			case "opencode":
 				// Cursor blinks: on for the first half of the loop (always on when idle/away).
 				cursorOn := frame < frameCount/2 || spec.mode == "idle" || spec.mode == "stale"
@@ -619,6 +654,43 @@ func main() {
 			bgTop: rgb{20, 18, 19}, bgBot: rgb{11, 11, 13},
 			accentA: rgb{110, 90, 86}, accentB: rgb{140, 120, 116}, badge: rgb{90, 95, 105},
 		},
+		// Codex GIFs (violet curly braces)
+		{
+			name: "codex-working.gif", kind: "codex", mode: "working", delayCS: 9, bobAmp: 6.0, orbitSpd: 1.0, starAlpha: 0.75,
+			bgTop: rgb{24, 18, 36}, bgBot: rgb{12, 11, 18},
+			accentA: rgb{139, 92, 246}, accentB: rgb{196, 181, 253}, badge: rgb{52, 168, 83},
+		},
+		{
+			name: "codex-thinking.gif", kind: "codex", mode: "thinking", delayCS: 10, bobAmp: 7.5, orbitSpd: 1.0, starAlpha: 0.85,
+			bgTop: rgb{22, 20, 40}, bgBot: rgb{12, 12, 20},
+			accentA: rgb{124, 108, 246}, accentB: rgb{165, 180, 252}, badge: rgb{165, 180, 252},
+		},
+		{
+			name: "codex-compacting.gif", kind: "codex", mode: "compacting", delayCS: 9, bobAmp: 4.5, orbitSpd: 1.0, starAlpha: 0.65,
+			bgTop: rgb{22, 18, 34}, bgBot: rgb{12, 11, 18},
+			accentA: rgb{120, 90, 200}, accentB: rgb{170, 150, 240}, badge: rgb{196, 181, 253},
+		},
+		{
+			name: "codex-shipped.gif", kind: "codex", mode: "shipped", delayCS: 8, bobAmp: 8.5, orbitSpd: 1.0, starAlpha: 0.9,
+			bgTop: rgb{18, 28, 28}, bgBot: rgb{11, 14, 18},
+			accentA: rgb{52, 211, 153}, accentB: rgb{167, 139, 250}, badge: rgb{251, 188, 5},
+		},
+		{
+			name: "codex-notification.gif", kind: "codex", mode: "notification", delayCS: 9, bobAmp: 5.0, orbitSpd: 1.0, starAlpha: 0.65,
+			bgTop: rgb{32, 24, 18}, bgBot: rgb{15, 14, 18},
+			accentA: rgb{251, 188, 5}, accentB: rgb{249, 115, 22}, badge: rgb{251, 188, 5},
+		},
+		{
+			name: "codex-idle.gif", kind: "codex", mode: "idle", delayCS: 13, bobAmp: 4.5, orbitSpd: 1.0, starAlpha: 0.8,
+			bgTop: rgb{20, 18, 30}, bgBot: rgb{11, 11, 17},
+			accentA: rgb{110, 95, 170}, accentB: rgb{160, 150, 220}, badge: rgb{148, 163, 184},
+		},
+		{
+			name: "codex-stale.gif", kind: "codex", mode: "stale", delayCS: 15, bobAmp: 2.0, orbitSpd: 1.0, starAlpha: 0.45,
+			bgTop: rgb{17, 17, 22}, bgBot: rgb{11, 11, 15},
+			accentA: rgb{85, 80, 110}, accentB: rgb{120, 115, 145}, badge: rgb{71, 85, 105},
+		},
+
 		// OpenCode GIFs (teal terminal prompt with a blinking cursor)
 		{
 			name: "opencode-working.gif", kind: "opencode", mode: "working", delayCS: 9, bobAmp: 6.0, orbitSpd: 1.0, starAlpha: 0.75,

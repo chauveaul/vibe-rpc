@@ -845,12 +845,18 @@ struct AgentLogo: View {
         switch source {
         case "claude": return "Claude Code"
         case "opencode": return "OpenCode"
+        case "codex": return "Codex"
         default: return "Antigravity"
         }
     }
 
     static func image(for source: String) -> NSImage {
         if let img = cache[source] { return img }
+        if source == "codex" {
+            let result = codexImage()
+            cache[source] = result
+            return result
+        }
         if source == "opencode" {
             let result = openCodeImage()
             cache[source] = result
@@ -887,6 +893,28 @@ extension AgentLogo {
                let tinted = sym.withSymbolConfiguration(.init(pointSize: 26, weight: .bold).applying(.init(paletteColors: [.white]))) {
                 let s = tinted.size
                 tinted.draw(in: NSRect(x: (rect.width - s.width) / 2, y: (rect.height - s.height) / 2, width: s.width, height: s.height))
+            }
+            return true
+        }
+    }
+}
+
+extension AgentLogo {
+    /// Codex: the desktop app's icon if installed, otherwise a "{ }" tile.
+    static func codexImage() -> NSImage {
+        for id in ["com.openai.codex", "com.openai.chatgpt.codex"] {
+            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) {
+                return NSWorkspace.shared.icon(forFile: url.path)
+            }
+        }
+        let size = NSSize(width: 64, height: 64)
+        return NSImage(size: size, flipped: false) { rect in
+            NSColor(red: 0.16, green: 0.13, blue: 0.24, alpha: 1).setFill()
+            NSBezierPath(roundedRect: rect, xRadius: 14, yRadius: 14).fill()
+            if let sym = NSImage(systemSymbolName: "curlybraces", accessibilityDescription: "Codex"),
+               let tinted = sym.withSymbolConfiguration(.init(pointSize: 28, weight: .bold).applying(.init(paletteColors: [.white]))) {
+                let sz = tinted.size
+                tinted.draw(in: NSRect(x: (rect.width - sz.width) / 2, y: (rect.height - sz.height) / 2, width: sz.width, height: sz.height))
             }
             return true
         }

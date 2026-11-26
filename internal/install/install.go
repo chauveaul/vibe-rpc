@@ -89,9 +89,31 @@ func ResolveBinary() string {
 		return "vibe-rpc"
 	}
 	if real, err := filepath.EvalSymlinks(exe); err == nil {
-		return real
+		return StableBinaryPath(real)
 	}
 	return exe
+}
+
+// StableBinaryPath maps a Homebrew keg path such as
+// /opt/homebrew/Cellar/vibe-rpc/2.1.0/bin/vibe-rpc to the prefix symlink
+// /opt/homebrew/bin/vibe-rpc, which survives `brew upgrade` (the versioned
+// keg is deleted on cleanup, which would break hooks and autostart). Any
+// other path is returned unchanged.
+func StableBinaryPath(real string) string {
+	slash := filepath.ToSlash(real)
+	i := strings.Index(slash, "/Cellar/")
+	if i < 0 {
+		return real
+	}
+	link := filepath.Join(filepath.FromSlash(slash[:i]), "bin", filepath.Base(real))
+	if target, err := filepath.EvalSymlinks(link); err == nil {
+		if a, errA := os.Stat(target); errA == nil {
+			if b, errB := os.Stat(real); errB == nil && os.SameFile(a, b) {
+				return link
+			}
+		}
+	}
+	return real
 }
 
 func shellQuote(p string) string {

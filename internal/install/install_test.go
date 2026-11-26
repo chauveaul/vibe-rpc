@@ -84,3 +84,29 @@ func TestInstallMigratesLegacyAgyRpcHooks(t *testing.T) {
 		t.Fatalf("legacy Claude hook not migrated: %s", c)
 	}
 }
+
+func TestStableBinaryPathPrefersHomebrewLink(t *testing.T) {
+	root := t.TempDir()
+	keg := filepath.Join(root, "Cellar", "vibe-rpc", "2.1.0", "bin", "vibe-rpc")
+	if err := os.MkdirAll(filepath.Dir(keg), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keg, []byte("bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// No prefix link yet: keep the keg path.
+	if got := StableBinaryPath(keg); got != keg {
+		t.Fatalf("without link got %q", got)
+	}
+	link := filepath.Join(root, "bin", "vibe-rpc")
+	_ = os.MkdirAll(filepath.Dir(link), 0o755)
+	if err := os.Symlink(keg, link); err != nil {
+		t.Skip("symlinks unsupported:", err)
+	}
+	if got := StableBinaryPath(keg); got != link {
+		t.Fatalf("expected prefix link %q, got %q", link, got)
+	}
+	if got := StableBinaryPath("/usr/local/bin/vibe-rpc"); got != "/usr/local/bin/vibe-rpc" {
+		t.Fatalf("non-Homebrew path changed: %q", got)
+	}
+}

@@ -1,0 +1,205 @@
+package install
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"strings"
+
+	"github.com/chauveaul/vibe-rpc/internal/paths"
+)
+
+// ErrOtherStatusLine means Claude Code already has a status line that isn't
+// vibe-rpc's; we never overwrite it.
+var ErrOtherStatusLine = errors.New("Claude Code already has a custom status line; vibe-rpc won't replace it")
+
+// ErrOtherAgyStatusLine means Antigravity CLI already has a custom status line
+// that isn't vibe-rpc's; we never overwrite it.
+var ErrOtherAgyStatusLine = errors.New("Antigravity CLI already has a custom status line; vibe-rpc won't replace it")
+
+// Both Claude Code and Antigravity CLI pass their live subscription quotas
+// (5-hour session and 7-day weekly windows) to their status line command on
+// stdin, so `vibe-rpc statusline` records them and prints a compact status bar.
+
+func isVibeStatusLine(v any) bool {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return false
+	}
+	cmd, _ := m["command"].(string)
+	return strings.Contains(cmd, "vibe-rpc") && strings.Contains(cmd, "statusline")
+}
+
+func statusLineCommand(v any) string {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return ""
+	}
+	cmd, _ := m["command"].(string)
+	return strings.TrimSpace(cmd)
+}
+
+func readSettingsJSON(path string) (map[string]any, []byte, error) {
+	root := map[string]any{}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return root, nil, nil
+		}
+		return nil, nil, err
+	}
+	if len(bytes.TrimSpace(b)) == 0 {
+		return root, b, nil
+	}
+	if err := json.Unmarshal(b, &root); err != nil {
+		return nil, nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	return root, b, nil
+}
+
+func writeSettingsJSON(path string, root map[string]any, orig []byte) (bool, error) {
+	out, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return false, err
+	}
+	out = append(out, '\n')
+	if bytes.Equal(orig, out) {
+		return false, nil
+	}
+	return true, paths.WriteFileAtomic(path, out, 0o644)
+}
+
+// ClaudeStatusLineState reports "vibe-rpc", "other" or "none".
+func ClaudeStatusLineState(settingsPath string) string {
+	if settingsPath == "" {
+		settingsPath = paths.ClaudeSettingsPath()
+	}
+	root, _, err := readSettingsJSON(settingsPath)
+	if err != nil {
+		return "none"
+	}
+	sl, ok := root["statusLine"]
+	switch {
+	case !ok || sl == nil:
+		return "none"
+	case isVibeStatusLine(sl):
+		return "vibe-rpc"
+	default:
+		return "other"
+	}
+}
+
+// InstallClaudeStatusLine makes `vibe-rpc statusline` Claude Code's status
+// line. It refreshes an existing vibe-rpc entry (e.g. a new binary path) but
+// returns ErrOtherStatusLine rather than replacing someone else's.
+func InstallClaudeStatusLine(settingsPath, binPath string) (bool, error) {
+	if settingsPath == "" {
+		settingsPath = paths.ClaudeSettingsPath()
+	}
+	if binPath == "" {
+		binPath = ResolveBinary()
+	}
+	root, orig, err := readSettingsJSON(settingsPath)
+	if err != nil {
+		return false, err
+	}
+	if sl, ok := root["statusLine"]; ok && sl != nil && !isVibeStatusLine(sl) {
+		return false, ErrOtherStatusLine
+	}
+	root["statusLine"] = map[string]any{
+		"type":    "command",
+		"command": shellQuote(binPath) + " statusline",
+		"padding": 0,
+	}
+	return writeSettingsJSON(settingsPath, root, orig)
+}
+
+// UninstallClaudeStatusLine removes the status line only if it's vibe-rpc's.
+func UninstallClaudeStatusLine(settingsPath string) (bool, error) {
+	if settingsPath == "" {
+		settingsPath = paths.ClaudeSettingsPath()
+	}
+	root, orig, err := readSettingsJSON(settingsPath)
+	if err != nil {
+		return false, err
+	}
+	if sl, ok := root["statusLine"]; !ok || !isVibeStatusLine(sl) {
+		return false, nil
+	}
+	delete(root, "statusLine")
+	return writeSettingsJSON(settingsPath, root, orig)
+}
+
+// AgyStatusLineState reports "vibe-rpc", "other" or "none" for Antigravity CLI's
+// ~/.gemini/antigravity-cli/settings.json. An entry with no custom command
+// (just toggling the built-in bar) is treated as "none".
+func AgyStatusLineState(settingsPath string) string {
+	if settingsPath == "" {
+		settingsPath = paths.AgyCLISettingsPath()
+	}
+	root, _, err := readSettingsJSON(settingsPath)
+	if err != nil {
+		return "none"
+	}
+	sl, ok := root["statusLine"]
+	if !ok || sl == nil {
+		return "none"
+	}
+	if isVibeStatusLine(sl) {
+		if m, ok := sl.(map[string]any); ok {
+			if en, has := m["enabled"].(bool); has && !en {
+				return "none"
+			}
+		}
+		return "vibe-rpc"
+	}
+	if statusLineCommand(sl) == "" {
+		return "none"
+	}
+	return "other"
+}
+
+// InstallAgyStatusLine wires `vibe-rpc statusline` into Antigravity CLI's
+// settings.json with stack_with_default: true so the built-in status line stays
+// visible alongside vibe-rpc. Never replaces another custom status line.
+func InstallAgyStatusLine(settingsPath, binPath string) (bool, error) {
+	if settingsPath == "" {
+		settingsPath = paths.AgyCLISettingsPath()
+	}
+	if binPath == "" {
+		binPath = ResolveBinary()
+	}
+	root, orig, err := readSettingsJSON(settingsPath)
+	if err != nil {
+		return false, err
+	}
+	if sl, ok := root["statusLine"]; ok && sl != nil && !isVibeStatusLine(sl) && statusLineCommand(sl) != "" {
+		return false, ErrOtherAgyStatusLine
+	}
+	root["statusLine"] = map[string]any{
+		"type":               "command",
+		"command":            shellQuote(binPath) + " statusline",
+		"enabled":            true,
+		"padding":            0,
+		"stack_with_default": true,
+	}
+	return writeSettingsJSON(settingsPath, root, orig)
+}
+
+// UninstallAgyStatusLine removes Antigravity CLI's status line only if it's vibe-rpc's.
+func UninstallAgyStatusLine(settingsPath string) (bool, error) {
+	if settingsPath == "" {
+		settingsPath = paths.AgyCLISettingsPath()
+	}
+	root, orig, err := readSettingsJSON(settingsPath)
+	if err != nil {
+		return false, err
+	}
+	if sl, ok := root["statusLine"]; !ok || !isVibeStatusLine(sl) {
+		return false, nil
+	}
+	delete(root, "statusLine")
+	return writeSettingsJSON(settingsPath, root, orig)
+}

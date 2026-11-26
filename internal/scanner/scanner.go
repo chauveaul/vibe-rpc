@@ -225,6 +225,7 @@ type Aggregate struct {
 	SourceDays       map[string]map[string]*SourceDay `json:"sourceDays,omitempty"` // source -> day -> stats
 	DualMs           int64                    `json:"dualMs"`                                // time both agents were active at once
 	DualByDay        map[string]int64         `json:"dualByDay,omitempty"`
+	RecentSpans      map[string][][2]int64    `json:"recentSpans,omitempty"` // source -> merged active spans from the last 24h
 	Notifications    int                      `json:"notifications"`
 	Compactions      int                      `json:"compactions"`
 	CompactionsByDay map[string]int           `json:"compactionsByDay"`
@@ -1405,6 +1406,15 @@ func AggregateFrom(cache *ScanCache) *Aggregate {
 	}
 
 	agg.DualMs = overlapByDay(mergeSpans(spansBySource["antigravity"]), mergeSpans(spansBySource["claude"]), agg.DualByDay)
+	agg.RecentSpans = map[string][][2]int64{}
+	cutoff := agg.GeneratedAt - 24*3_600_000
+	for src, spans := range spansBySource {
+		for _, sp := range mergeSpans(spans) {
+			if sp[1] >= cutoff {
+				agg.RecentSpans[src] = append(agg.RecentSpans[src], sp)
+			}
+		}
+	}
 	agg.UniqueFiles = len(fileSet)
 	agg.LinesNet = agg.LinesAdded - agg.LinesRemoved
 
@@ -1760,6 +1770,18 @@ func overlapByDay(a, b [][2]int64, byDay map[string]int64) int64 {
 			i++
 		} else {
 			j++
+		}
+	}
+	return total
+}
+
+// ActiveWithin sums the parts of spans that fall inside [from, to) (unix ms).
+func ActiveWithin(spans [][2]int64, from, to int64) int64 {
+	var total int64
+	for _, sp := range spans {
+		lo, hi := max(sp[0], from), min(sp[1], to)
+		if hi > lo {
+			total += hi - lo
 		}
 	}
 	return total

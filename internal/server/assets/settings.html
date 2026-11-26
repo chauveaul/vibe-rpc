@@ -460,6 +460,66 @@
           <button type="submit" class="btn primary">Save changes</button>
         </div>
       </section>
+
+      {{if .NotchSupported}}
+      <!-- VibeNotch (macOS) -->
+      <section class="set-card">
+        <div class="set-head">
+          <h2>VibeNotch</h2>
+          <span class="set-hint">Live status and usage in your MacBook's notch</span>
+        </div>
+        <input type="hidden" name="notch_section" value="1">
+        <div class="notch-row">
+          <label class="check big"><input type="checkbox" name="notchEnabled" {{if .Cfg.Notch.Enabled}}checked{{end}}> Show VibeNotch in the notch</label>
+          <span class="notch-state">
+            {{if .NotchRunning}}<span class="dot up"></span>Running
+            {{else if .Cfg.Notch.Enabled}}<span class="dot wait"></span>Starting…
+            {{else}}<span class="dot down"></span>Off{{end}}
+          </span>
+        </div>
+        <p class="set-note">While an agent works, a timer and status GIF appear beside the notch. Hover under the notch for your Discord card, today's stats, usage bars and quick actions. The daemon keeps it running, so it comes back at login.</p>
+        {{if not .NotchInstalled}}
+        <p class="set-note warn">VibeNotch.app isn't installed yet. Build it from the repo with <code class="code-chip">macos/VibeNotch/build-app.sh --install</code> (needs Xcode).</p>
+        {{end}}
+
+        <div class="sub-head">
+          <h3>Claude Code usage limits</h3>
+          <span class="set-hint">Session (5-hour) and weekly bars, for Pro, Max and Ultra plans</span>
+        </div>
+        <div class="notch-row">
+          {{if eq .ClaudeStatusLine "vibe-rpc"}}
+            <span class="notch-state"><span class="dot up"></span>On: vibe-rpc is Claude Code's status line</span>
+            <button type="submit" formaction="/settings/claude-statusline" name="action" value="remove" class="btn ghost">Remove</button>
+          {{else if eq .ClaudeStatusLine "other"}}
+            <span class="notch-state"><span class="dot wait"></span>You already have a custom Claude Code status line, so vibe-rpc won't replace it</span>
+          {{else}}
+            <span class="notch-state"><span class="dot down"></span>Off</span>
+            <button type="submit" formaction="/settings/claude-statusline" name="action" value="install" class="btn">Turn on</button>
+          {{end}}
+        </div>
+        <p class="set-note">Claude Code shares its plan limits only with its status line, so this makes <code class="code-chip">vibe-rpc statusline</code> your status line (a one-line bar under the Claude Code prompt).</p>
+
+        <div class="sub-head">
+          <h3>Antigravity CLI usage limits</h3>
+          <span class="set-hint">5-hour and weekly quotas (auto-switches between Gemini &amp; 3P pools)</span>
+        </div>
+        <div class="notch-row">
+          {{if eq .AgyStatusLine "vibe-rpc"}}
+            <span class="notch-state"><span class="dot up"></span>On: stacked under Antigravity CLI's default status line</span>
+            <button type="submit" formaction="/settings/agy-statusline" name="action" value="remove" class="btn ghost">Remove</button>
+          {{else if eq .AgyStatusLine "other"}}
+            <span class="notch-state"><span class="dot wait"></span>You already have a custom Antigravity CLI status line, so vibe-rpc won't replace it</span>
+          {{else}}
+            <span class="notch-state"><span class="dot down"></span>Off (showing 5-hour active time fallback)</span>
+            <button type="submit" formaction="/settings/agy-statusline" name="action" value="install" class="btn">Turn on</button>
+          {{end}}
+        </div>
+        <p class="set-note">Wires <code class="code-chip">vibe-rpc statusline</code> in <code class="code-chip">~/.gemini/antigravity-cli/settings.json</code> with <code class="code-chip">stack_with_default: true</code> so Antigravity's built-in status bar stays visible. Restart an open <code class="code-chip">agy</code> session (or run <code class="code-chip">/statusline on</code> inside it) to start streaming immediately.</p>
+        <div class="save-actions">
+          <button type="submit" class="btn primary">Save changes</button>
+        </div>
+      </section>
+      {{end}}
     </form>
 
     <!-- Per-workspace Privacy -->

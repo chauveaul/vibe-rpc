@@ -48,6 +48,13 @@ type SessionState struct {
 	LastUserPrompt     int64          `json:"lastUserPrompt,omitempty"`
 	LastUserInputSig   string         `json:"lastUserInputSig,omitempty"`
 	LastNotification   int64          `json:"lastNotification,omitempty"`
+	// What the agent is waiting on, for the notch's attention alerts.
+	AttentionKind string `json:"attentionKind,omitempty"` // permission | question | idle
+	AttentionText string `json:"attentionText,omitempty"`
+	// The GUI app hosting the agent (terminal or editor), found by walking
+	// the process tree; used to hide alerts while that app is frontmost.
+	HostApp    string `json:"hostApp,omitempty"`
+	HostAppPID int32  `json:"hostAppPid,omitempty"`
 	Status             string         `json:"status"`
 	CurrentTool        string         `json:"currentTool,omitempty"`
 	CurrentFile        string         `json:"currentFile,omitempty"`
@@ -269,9 +276,13 @@ func ListSessions(opts ListOptions) []SessionState {
 	}
 
 	if opts.IncludeClaude && opts.IncludeClaudeRPC && opts.ClaudeStateDir != "" && opts.ClaudeStateDir != opts.StateDir {
+		// claude-rpc's state only fills in sessions vibe-rpc has no record
+		// of. When both tools' hooks run, vibe-rpc's copy is authoritative:
+		// claude-rpc's is often fresher but lacks vibe-rpc-only fields (e.g.
+		// attention prompts), so "newest wins" would hide them.
 		for _, s := range readDirSessionStates(opts.ClaudeStateDir, "claude") {
 			s.Source = "claude"
-			if prev, ok := byID[s.SessionID]; !ok || s.LastActivity > prev.LastActivity {
+			if _, ok := byID[s.SessionID]; !ok {
 				byID[s.SessionID] = s
 			}
 		}

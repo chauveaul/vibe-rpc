@@ -52,6 +52,13 @@ type TriggerConfig struct {
 	LargeImageText string `json:"largeImageText,omitempty"`
 }
 
+// NotchConfig controls VibeNotch, the macOS notch companion app.
+type NotchConfig struct {
+	// Enabled keeps VibeNotch running: the daemon launches it (and so it
+	// returns at login via the daemon's autostart); disabling quits it.
+	Enabled bool `json:"enabled"`
+}
+
 type PrivacyConfig struct {
 	Patterns                []string `json:"patterns,omitempty"`
 	Mode                    string   `json:"mode,omitempty"`
@@ -140,6 +147,7 @@ type Config struct {
 	Triggers                []TriggerConfig   `json:"triggers,omitempty"`
 	TriggerFrameSec         int               `json:"triggerFrameSec"`
 	Privacy                 PrivacyConfig     `json:"privacy"`
+	Notch                   NotchConfig       `json:"notch"`
 	ShowElapsed             *bool             `json:"showElapsed,omitempty"`
 	ShowPartySize           *bool             `json:"showPartySize,omitempty"`
 	ActivityType            int               `json:"activityType"`

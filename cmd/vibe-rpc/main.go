@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,7 +23,9 @@ import (
 	"github.com/chauveaul/vibe-rpc/internal/format"
 	"github.com/chauveaul/vibe-rpc/internal/hook"
 	"github.com/chauveaul/vibe-rpc/internal/install"
+	"github.com/chauveaul/vibe-rpc/internal/limits"
 	"github.com/chauveaul/vibe-rpc/internal/mcp"
+	"github.com/chauveaul/vibe-rpc/internal/notch"
 	"github.com/chauveaul/vibe-rpc/internal/paths"
 	"github.com/chauveaul/vibe-rpc/internal/pause"
 	"github.com/chauveaul/vibe-rpc/internal/presence"
@@ -37,20 +40,27 @@ import (
 	"github.com/chauveaul/vibe-rpc/internal/update"
 )
 
+// openBrowser opens u shortly after the server starts listening.
 func openBrowser(u string) {
 	go func() {
 		time.Sleep(250 * time.Millisecond)
-		var cmd *exec.Cmd
-		switch runtime.GOOS {
-		case "darwin":
-			cmd = exec.Command("open", u)
-		case "windows":
-			cmd = exec.Command("cmd", "/c", "start", u)
-		default:
-			cmd = exec.Command("xdg-open", u)
-		}
-		_ = cmd.Run()
+		openBrowserNow(u)
 	}()
+}
+
+// openBrowserNow opens u and waits for the opener, for callers that exit
+// right after (a background openBrowser would die with the process).
+func openBrowserNow(u string) {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", u)
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "start", u)
+	default:
+		cmd = exec.Command("xdg-open", u)
+	}
+	_ = cmd.Run()
 }
 
 func loadAggOrScan() *scanner.Aggregate {
@@ -108,6 +118,8 @@ func main() {
 		Use:     "vibe-rpc",
 		Short:   "Discord Rich Presence & coding analytics for Antigravity + Claude Code (100% Go)",
 		Version: paths.Version,
+		// Print just the error, not the whole usage block, when a command fails.
+		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return tui.Run()
 		},
@@ -188,6 +200,13 @@ func main() {
 			if ok, _ := install.UninstallAntigravityHooks(""); ok {
 				fmt.Printf("  ✓ removed Antigravity hooks from %s\n", paths.AgyHooksPath())
 			}
+			if ok, _ := install.UninstallClaudeStatusLine(""); ok {
+				fmt.Println("✓ Removed vibe-rpc's Claude Code status line")
+			}
+			if ok, _ := install.UninstallAgyStatusLine(""); ok {
+				fmt.Println("✓ Removed vibe-rpc's Antigravity CLI status line")
+			}
+			notch.Quit()
 			if ok, _ := install.UninstallClaudeHooks(""); ok {
 				fmt.Printf("  ✓ removed Claude Code hooks from %s\n", paths.ClaudeSettingsPath())
 			}
@@ -211,6 +230,14 @@ func main() {
 			}
 			addr := fmt.Sprintf("127.0.0.1:%d", p)
 			u := fmt.Sprintf("http://%s%s", addr, route)
+			// A vibe-rpc dashboard is already running there: just open it.
+			if server.IsRunningAt(addr) {
+				fmt.Printf("vibe-rpc is already serving at %s\n", u)
+				if !noOpen {
+					openBrowserNow(u)
+				}
+				return nil
+			}
 			fmt.Printf("Serving vibe-rpc at %s (Ctrl+C to stop)\n", u)
 			if !noOpen {
 				openBrowser(u)
@@ -558,6 +585,10 @@ func main() {
 		Use:   "statusline",
 		Short: "Print a single-line status string for tmux / shell prompts / status bars",
 		Run: func(cmd *cobra.Command, args []string) {
+			// Claude Code pipes its session JSON (incl. rate limits) on stdin.
+			if payload := readPipedStdin(300*time.Millisecond, 1<<20); len(payload) > 0 {
+				_, _ = limits.SaveFromStatusLine(payload, time.Now())
+			}
 			cfg, agg, st := resolveLiveState()
 			vars := format.BuildVars(st, cfg, agg)
 			if slTpl == "" {
@@ -832,6 +863,59 @@ func main() {
 	}
 	assetsCmd.AddCommand(assetsExportCmd)
 
+	// notch (macOS): the VibeNotch companion app
+	notchFeedCmd := &cobra.Command{
+		Use:    "notch-feed",
+		Short:  "Stream live status as JSON lines for the VibeNotch app",
+		Hidden: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			enc := json.NewEncoder(os.Stdout)
+			for {
+				// A failed write means the notch app went away: exit quietly.
+				if err := enc.Encode(server.BuildNotchFeed()); err != nil {
+					return nil
+				}
+				time.Sleep(time.Second)
+			}
+		},
+	}
+	notchCmd := &cobra.Command{
+		Use:       "notch [on|off]",
+		Short:     "Turn VibeNotch, the live status panel in your MacBook's notch, on or off (macOS)",
+		Args:      cobra.MaximumNArgs(1),
+		ValidArgs: []string{"on", "off"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !notch.Supported() {
+				return fmt.Errorf("VibeNotch is macOS-only")
+			}
+			on := len(args) == 0 || args[0] == "on"
+			if len(args) == 1 && args[0] != "on" && args[0] != "off" {
+				return fmt.Errorf("use `vibe-rpc notch on` or `vibe-rpc notch off`")
+			}
+			if err := setNotchEnabled(on); err != nil {
+				return err
+			}
+			if !on {
+				notch.Quit()
+				fmt.Println("VibeNotch is off. Turn it back on with `vibe-rpc notch` or in Settings.")
+				return nil
+			}
+			exe, err := os.Executable()
+			if err != nil {
+				return err
+			}
+			app, err := notch.Launch(install.StableBinaryPath(exe))
+			if err != nil {
+				return err
+			}
+			fmt.Printf("VibeNotch is on (%s). Hover under the notch to open it.\n", app)
+			if install.ClaudeStatusLineState("") != "vibe-rpc" || install.AgyStatusLineState("") != "vibe-rpc" {
+				fmt.Println("Tip: for real 5-hour & weekly usage bars, turn on Claude Code / Antigravity usage limits in `vibe-rpc settings`.")
+			}
+			return nil
+		},
+	}
+
 	// upgrade
 	var upCheck, upForce bool
 	upgradeCmd := &cobra.Command{
@@ -902,7 +986,7 @@ version. Homebrew/Scoop installs should be upgraded with their package manager.`
 
 	root.AddCommand(
 		setupCmd, uninstallCmd, serveCmd, settingsCmd, wrappedCmd,
-		daemonCmd, startCmd, stopCmd, restartCmd, upgradeCmd, hookCmd,
+		daemonCmd, startCmd, stopCmd, restartCmd, upgradeCmd, notchCmd, notchFeedCmd, hookCmd,
 		statusCmd, todayCmd, weekCmd, projectsCmd, recapCmd,
 		insightsCmd, exportCmd, statcardsCmd, statuslineCmd, mcpCmd,
 		privateCmd, pauseCmd, logsCmd, doctorCmd, scanCmd, backfillCmd,
@@ -911,5 +995,34 @@ version. Homebrew/Scoop installs should be upgraded with their package manager.`
 
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
+	}
+}
+
+// setNotchEnabled persists notch.enabled without freezing other defaults.
+func setNotchEnabled(on bool) error {
+	base := config.Load()
+	edited := base.Clone()
+	edited.Notch.Enabled = on
+	_, err := config.SaveDiff(paths.ConfigPath(), base, edited)
+	return err
+}
+
+// readPipedStdin reads stdin only when it's a pipe/file (never a terminal),
+// giving up after timeout so a caller that leaves stdin open can't hang us.
+func readPipedStdin(timeout time.Duration, limit int64) []byte {
+	fi, err := os.Stdin.Stat()
+	if err != nil || fi.Mode()&os.ModeCharDevice != 0 {
+		return nil
+	}
+	ch := make(chan []byte, 1)
+	go func() {
+		b, _ := io.ReadAll(io.LimitReader(os.Stdin, limit))
+		ch <- b
+	}()
+	select {
+	case b := <-ch:
+		return b
+	case <-time.After(timeout):
+		return nil
 	}
 }

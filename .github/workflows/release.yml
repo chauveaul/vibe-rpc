@@ -66,3 +66,25 @@ jobs:
           fi
           git commit -m "vibe-rpc ${VERSION#v}"
           git push origin HEAD:main
+
+  release-notch:
+    needs: release
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build VibeNotch.app
+        env:
+          VIBE_NOTCH_VERSION: ${{ github.ref_name }}
+        run: |
+          VIBE_NOTCH_VERSION="${VIBE_NOTCH_VERSION#v}" sh macos/VibeNotch/build-app.sh
+          ditto -c -k --sequesterRsrc --keepParent \
+            macos/VibeNotch/build/VibeNotch.app \
+            "VibeNotch_${VIBE_NOTCH_VERSION#v}_darwin_all.zip"
+
+      - name: Attach VibeNotch.app to GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release upload "$TAG" "VibeNotch_${TAG#v}_darwin_all.zip" --clobber

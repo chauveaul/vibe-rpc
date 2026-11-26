@@ -3,9 +3,11 @@ package server
 import (
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"html/template"
+	"io"
 	"math"
 	"net/http"
 	"net/url"
@@ -21,6 +23,8 @@ import (
 	"github.com/chauveaul/vibe-rpc/internal/daemon"
 	"github.com/chauveaul/vibe-rpc/internal/doctor"
 	"github.com/chauveaul/vibe-rpc/internal/format"
+	"github.com/chauveaul/vibe-rpc/internal/install"
+	"github.com/chauveaul/vibe-rpc/internal/notch"
 	"github.com/chauveaul/vibe-rpc/internal/notify"
 	"github.com/chauveaul/vibe-rpc/internal/paths"
 	"github.com/chauveaul/vibe-rpc/internal/presence"
@@ -229,6 +233,8 @@ func NewHandler() http.Handler {
 	mux.HandleFunc("POST /settings/triggers/add", guard(handleSettingsTriggerAdd))
 	mux.HandleFunc("POST /settings/triggers/delete", guard(handleSettingsTriggerDelete))
 	mux.HandleFunc("POST /settings/webhook/test", guard(handleSettingsWebhookTest))
+	mux.HandleFunc("POST /settings/claude-statusline", guard(handleSettingsClaudeStatusLine))
+	mux.HandleFunc("POST /settings/agy-statusline", guard(handleSettingsAgyStatusLine))
 	mux.HandleFunc("POST /settings/daemon", guard(handleSettingsDaemon))
 	mux.HandleFunc("POST /settings/privacy", guard(handleSettingsPrivacy))
 	mux.HandleFunc("GET /wrapped", guard(handleWrapped))
@@ -251,6 +257,25 @@ func NewHandler() http.Handler {
 	mux.HandleFunc("GET /api/day/{day}", guard(handleAPIDay))
 
 	return mux
+}
+
+// IsRunningAt reports whether a vibe-rpc dashboard already answers at addr,
+// so `vibe-rpc serve` can reuse it instead of failing to bind.
+func IsRunningAt(addr string) bool {
+	c := &http.Client{Timeout: 800 * time.Millisecond}
+	resp, err := c.Get("http://" + addr + "/api/state")
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+	var probe struct {
+		State json.RawMessage `json:"state"`
+		Vars  json.RawMessage `json:"vars"`
+	}
+	return json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&probe) == nil && len(probe.State) > 0 && len(probe.Vars) > 0
 }
 
 func Serve(addr string) error {
@@ -1119,6 +1144,11 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 		"RotationSec":       cfg.RotationIntervalMs / 1000,
 		"Workspaces":        discoverWorkspaces(cfg),
 		"Notice":            r.URL.Query().Get("notice"),
+		"NotchSupported":    notch.Supported(),
+		"NotchInstalled":    notch.Find(exeOrEmpty()) != "",
+		"NotchRunning":      notch.Running(),
+		"ClaudeStatusLine":  install.ClaudeStatusLineState(""),
+		"AgyStatusLine":     install.AgyStatusLineState(""),
 		"GoalDailyHours":    fmtNum(cfg.Goals.DailyHours),
 		"GoalDailyPrompts":  fmtNum(float64(cfg.Goals.DailyPrompts)),
 		"GoalWeeklyHours":   fmtNum(cfg.Goals.WeeklyHours),
@@ -1238,6 +1268,9 @@ func parseSettingsForm(r *http.Request, base config.Config) (config.Config, stri
 	if r.FormValue("automation_section") == "1" {
 		parseAutomation(r, &edited)
 	}
+	if r.FormValue("notch_section") == "1" {
+		edited.Notch.Enabled = r.FormValue("notchEnabled") == "on"
+	}
 
 	return edited, selStatus
 }
@@ -1321,6 +1354,65 @@ func handleSettingsSave(w http.ResponseWriter, r *http.Request) {
 	base := config.Load()
 	edited, selStatus := parseSettingsForm(r, base)
 	_, err := config.SaveDiff(paths.ConfigPath(), base, edited)
+	if err == nil && edited.Notch.Enabled != base.Notch.Enabled {
+		err = applyNotchToggle(edited.Notch.Enabled)
+	}
+	redirectSettings(w, r, selStatus, err == nil, err)
+}
+
+// applyNotchToggle launches or quits VibeNotch right away when the setting
+// changes (the daemon also keeps it running while enabled).
+var applyNotchToggle = func(on bool) error {
+	if !notch.Supported() {
+		return nil
+	}
+	if !on {
+		notch.Quit()
+		return nil
+	}
+	if notch.Running() {
+		return nil
+	}
+	_, err := notch.Launch(exeOrEmpty())
+	if errors.Is(err, notch.ErrNotInstalled) {
+		return fmt.Errorf("Saved, but VibeNotch.app isn't installed yet. Build it with: macos/VibeNotch/build-app.sh --install")
+	}
+	return err
+}
+
+func exeOrEmpty() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	return install.StableBinaryPath(exe)
+}
+
+// handleSettingsClaudeStatusLine makes vibe-rpc Claude Code's status line
+// (the only way Claude Code shares its 5-hour/weekly limits), or removes it.
+func handleSettingsClaudeStatusLine(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	selStatus := validStatus(r.FormValue("status"))
+	var err error
+	if r.FormValue("action") == "remove" {
+		_, err = install.UninstallClaudeStatusLine("")
+	} else {
+		_, err = install.InstallClaudeStatusLine("", exeOrEmpty())
+	}
+	redirectSettings(w, r, selStatus, err == nil, err)
+}
+
+// handleSettingsAgyStatusLine wires vibe-rpc into Antigravity CLI's status line
+// (stacked with the default bar) to capture real 5-hour/weekly quotas, or removes it.
+func handleSettingsAgyStatusLine(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	selStatus := validStatus(r.FormValue("status"))
+	var err error
+	if r.FormValue("action") == "remove" {
+		_, err = install.UninstallAgyStatusLine("")
+	} else {
+		_, err = install.InstallAgyStatusLine("", exeOrEmpty())
+	}
 	redirectSettings(w, r, selStatus, err == nil, err)
 }
 

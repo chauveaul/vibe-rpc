@@ -13,6 +13,7 @@ import (
 	"github.com/chauveaul/vibe-rpc/internal/config"
 	"github.com/chauveaul/vibe-rpc/internal/gitinfo"
 	"github.com/chauveaul/vibe-rpc/internal/paths"
+	"github.com/chauveaul/vibe-rpc/internal/proc"
 	"github.com/chauveaul/vibe-rpc/internal/ships"
 	"github.com/chauveaul/vibe-rpc/internal/state"
 )
@@ -48,6 +49,8 @@ type Payload struct {
 	ToolInputSnake      map[string]any `json:"tool_input"`
 	ToolInputCamel      map[string]any `json:"toolInput"`
 	Trigger             string         `json:"trigger"`
+	Message             string         `json:"message"`           // Notification
+	NotificationType    string         `json:"notification_type"` // Notification: permission_prompt | idle_prompt | …
 	Matcher             string         `json:"matcher"`
 	ModelRaw            any            `json:"model"`
 }
@@ -320,7 +323,11 @@ func ProcessEvent(event string, in Payload, nowMs int64, explicitSource string) 
 		if toolName == "run_command" || toolName == "Bash" {
 			shellCmd = strArg(toolArgs, "CommandLine", "command")
 		}
-		isAsk := toolName == "ask_question"
+		isAsk := toolName == "ask_question" || toolName == "AskUserQuestion"
+		askText := ""
+		if isAsk {
+			askText = questionText(toolArgs)
+		}
 		update(func(s *state.SessionState, stale bool) {
 			s.Tools++
 			s.ToolBreakdown[toolName]++
@@ -331,6 +338,8 @@ func ProcessEvent(event string, in Payload, nowMs int64, explicitSource string) 
 				if isAsk {
 					s.Status = "notification"
 					s.LastNotification = nowMs
+					s.AttentionKind, s.AttentionText = "question", askText
+					refreshHostApp(s)
 					s.CurrentTool = ""
 					s.CurrentFile = ""
 					s.ToolStartedAt = 0
@@ -414,9 +423,20 @@ func ProcessEvent(event string, in Payload, nowMs int64, explicitSource string) 
 		})
 
 	case "Notification":
+		kind, text := attentionFromNotification(in.NotificationType, in.Message)
 		update(func(s *state.SessionState, _ bool) {
+			// Claude Code follows a question with a generic "needs your
+			// permission" notification; keep the more useful question text.
+			keepQuestion := s.Status == "notification" && s.AttentionKind == "question" &&
+				s.AttentionText != "" && nowMs-s.LastNotification < 15_000 && kind != "idle"
 			s.Status = "notification"
 			s.LastNotification = nowMs
+			if !keepQuestion {
+				s.AttentionKind, s.AttentionText = kind, text
+			}
+			if kind != "idle" {
+				refreshHostApp(s)
+			}
 			s.LastActivity = nowMs
 			s.AgentClosed = false
 			s.ClaudeClosed = false
@@ -514,4 +534,52 @@ func RunCLI(event, sourceFlag string, stdin io.Reader, stdout io.Writer) {
 	ProcessEvent(resolvedEvent, in, time.Now().UnixMilli(), source)
 	out, _ := json.Marshal(OutputFor(resolvedEvent, source))
 	_, _ = stdout.Write(out)
+}
+
+// attentionFromNotification classifies Claude Code's Notification hook.
+// "idle_prompt" fires after every finished turn ("waiting for your input"),
+// so it's kept for Discord's Waiting status but not raised in the notch.
+func attentionFromNotification(typ, msg string) (string, string) {
+	msg = strings.TrimSpace(msg)
+	switch {
+	case typ == "idle_prompt":
+		return "idle", msg
+	case typ == "permission_prompt" || strings.Contains(strings.ToLower(msg), "permission"):
+		return "permission", msg
+	case typ == "auth_success":
+		return "idle", msg
+	default: // elicitation dialogs and anything new
+		if msg == "" {
+			msg = "Needs your input"
+		}
+		return "question", msg
+	}
+}
+
+// questionText pulls the question out of Antigravity's ask_question args or
+// Claude Code's AskUserQuestion input ({"questions":[{"question":…}]}).
+func questionText(args map[string]any) string {
+	if qs, ok := args["questions"].([]any); ok && len(qs) > 0 {
+		if q, ok := qs[0].(map[string]any); ok {
+			if t, _ := q["question"].(string); t != "" {
+				if len(qs) > 1 {
+					return fmt.Sprintf("%s (+%d more)", t, len(qs)-1)
+				}
+				return t
+			}
+		}
+	}
+	if t := strArg(args, "Question", "question", "Prompt", "prompt", "Message", "message", "Text", "text"); t != "" {
+		return t
+	}
+	return "Has a question for you"
+}
+
+// refreshHostApp records which GUI app hosts this agent (once, or again if
+// that app has quit). The hook's parent is the agent process.
+func refreshHostApp(s *state.SessionState) {
+	if s.HostAppPID > 0 && proc.Alive(s.HostAppPID) {
+		return
+	}
+	s.HostApp, s.HostAppPID = proc.HostApp(int32(os.Getppid()))
 }

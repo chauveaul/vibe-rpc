@@ -21,6 +21,8 @@ import (
 	"github.com/chauveaul/vibe-rpc/internal/discord"
 	"github.com/chauveaul/vibe-rpc/internal/format"
 	"github.com/chauveaul/vibe-rpc/internal/gitinfo"
+	"github.com/chauveaul/vibe-rpc/internal/install"
+	"github.com/chauveaul/vibe-rpc/internal/notch"
 	"github.com/chauveaul/vibe-rpc/internal/notify"
 	"github.com/chauveaul/vibe-rpc/internal/paths"
 	"github.com/chauveaul/vibe-rpc/internal/pause"
@@ -174,6 +176,7 @@ func Run() error {
 	}
 	pollTicker := time.NewTicker(pollDur)
 	defer pollTicker.Stop()
+	r.ensureNotch()
 
 	for {
 		select {
@@ -192,6 +195,7 @@ func Run() error {
 		case <-pollTicker.C:
 			r.reloadConfigAndAgg()
 			r.pushNow()
+			r.ensureNotch()
 		case <-scanTicker.C:
 			go func() {
 				res := scanner.Scan(scanner.ScanOptions{})
@@ -638,7 +642,8 @@ func (r *Runner) pushNow() {
 		if proj == "" {
 			proj = cfg.AppName
 		}
-		if notify.ShouldNotify(cfg.Notify, prev, st.Status) {
+		// With VibeNotch up, prompts show in the notch instead of a banner.
+		if notify.ShouldNotify(cfg.Notify, prev, st.Status) && !(cfg.Notch.Enabled && notch.Running()) {
 			notify.Desktop(cfg.AppName+" · Waiting on you", "Input needed in "+proj)
 		}
 		if notify.ShouldWebhook(cfg.Webhook, prev, st.Status) {
@@ -790,4 +795,22 @@ func (r *Runner) cleanup() {
 	}
 	_ = os.Remove(paths.DaemonInfoPath())
 	r.log.Log("daemon stopped cleanly")
+}
+
+// ensureNotch keeps VibeNotch running while it's enabled in config. Since the
+// daemon itself autostarts at login, this also brings the notch back at login.
+func (r *Runner) ensureNotch() {
+	r.mu.Lock()
+	enabled := r.cfg.Notch.Enabled
+	r.mu.Unlock()
+	if !enabled || !notch.Supported() || notch.Running() {
+		return
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	if app, err := notch.Launch(install.StableBinaryPath(exe)); err == nil {
+		r.log.Log("launched VibeNotch (%s)", app)
+	}
 }

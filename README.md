@@ -82,6 +82,10 @@ git tag v2.1.0 && git push origin v2.1.0
 
 Dry run locally with `goreleaser release --snapshot --clean`.
 
+## OpenCode
+
+vibe-rpc also tracks [OpenCode](https://opencode.ai) sessions. `vibe-rpc setup` installs a small plugin at `~/.config/opencode/plugin/vibe-rpc.js` that forwards OpenCode's events (prompts, tool calls, permission prompts, idle) to vibe-rpc, so OpenCode shows on Discord, in the dashboard's running sessions and in VibeNotch's alerts. History (tokens, cost, active time, tools) is read from OpenCode's database with `opencode db`, so nothing extra is needed. Skip it with `vibe-rpc setup --no-opencode` or untick **Track OpenCode** in Settings.
+
 ## VibeNotch (macOS)
 
 A live status panel that lives in your MacBook's notch. While Antigravity or Claude Code is working, small "live activity" ears appear beside the notch: the status GIF on the left and a session timer on the right. Hover under the notch to expand it into your live Discord card, today's hours and goal, usage bars, and buttons for Pause 30m, Dashboard, Settings and Wrapped.

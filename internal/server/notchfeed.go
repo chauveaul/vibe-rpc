@@ -305,6 +305,7 @@ func listAttention(cfg config.Config, now time.Time) []notchAttention {
 	for _, s := range state.ListSessions(state.ListOptions{
 		IncludeAntigravity: cfg.Sources.WantAntigravity(),
 		IncludeClaude:      cfg.Sources.WantClaude(),
+		IncludeOpenCode:    cfg.Sources.WantOpenCode(),
 		IncludeClaudeRPC:   true,
 	}) {
 		if s.Status != "notification" || s.AgentClosed || s.ClaudeClosed {
@@ -321,9 +322,7 @@ func listAttention(cfg config.Config, now time.Time) []notchAttention {
 			Source: s.Source, Kind: s.AttentionKind, Text: s.AttentionText, Since: s.LastNotification,
 			HostApp: s.HostApp, HostAppPID: s.HostAppPID,
 		}
-		if a.Source != "claude" {
-			a.Source = "antigravity"
-		}
+		a.Source = scanner.SourceKey(a.Source)
 		if s.Cwd != "" {
 			a.Project = filepath.Base(s.Cwd)
 		}

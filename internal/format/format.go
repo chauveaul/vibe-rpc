@@ -530,9 +530,13 @@ func BuildVars(st state.SessionState, cfg config.Config, agg *scanner.Aggregate)
 	// Source breakdown
 	source := "antigravity"
 	sourcePretty := "Antigravity"
-	if st.Source == "claude" {
+	switch st.Source {
+	case "claude":
 		source = "claude"
 		sourcePretty = "Claude Code"
+	case "opencode":
+		source = "opencode"
+		sourcePretty = "OpenCode"
 	}
 	liveSrcs := map[string]bool{}
 	if st.AntigravityActive {
@@ -612,7 +616,7 @@ func BuildVars(st state.SessionState, cfg config.Config, agg *scanner.Aggregate)
 		}
 		agyFile = prettyFilePath(st.AgySession.CurrentFile)
 		agyTool = HumanTool(st.AgySession.CurrentTool)
-	} else if st.Source != "claude" {
+	} else if st.Source == "antigravity" || st.Source == "" {
 		agyProj = projectPretty
 		agyModel = modelPretty
 		agyFile = prettyFilePath(st.CurrentFile)

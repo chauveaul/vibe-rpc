@@ -17,7 +17,7 @@ import (
 	"github.com/chauveaul/vibe-rpc/internal/stats"
 )
 
-// ── Antigravity vs Claude Code ───────────────────────────────────────────────
+// ── Agent comparison (any number of agents) ─────────────────────────────────
 
 // sourceTotals is one agent's activity summed over the selected range.
 type sourceTotals struct {
@@ -36,16 +36,23 @@ func (t sourceTotals) avgSessionMs() int64 {
 	return t.ActiveMs / int64(t.Sessions)
 }
 
-// cmpRow is one metric compared across both agents. AgyPct is Antigravity's
-// share of the pair (0–100), drawn as a two-sided bar.
+type cmpAgent struct {
+	Key  string
+	Name string
+}
+
+// cmpCell is one agent's value for a metric. Pct is its share of the row
+// total (drawn as a segment of a stacked bar).
+type cmpCell struct {
+	Key   string
+	Text  string
+	Pct   float64
+	Leads bool
+}
+
 type cmpRow struct {
-	Label     string
-	Agy       string
-	Claude    string
-	AgyPct    int
-	ClaudePct int
-	AgyLeads  bool
-	CCLeads   bool
+	Label string
+	Cells []cmpCell
 }
 
 type toolRow struct {
@@ -54,13 +61,19 @@ type toolRow struct {
 	Pct   int // relative to that agent's top tool
 }
 
+type agentTools struct {
+	Key, Name string
+	Tools     []toolRow
+}
+
 type compareView struct {
-	Rows        []cmpRow
-	AgyTools    []toolRow
-	ClaudeTools []toolRow
-	DualHours   string
-	DualPct     string // share of combined active time
-	HasData     bool
+	Agents    []cmpAgent
+	Title     string // "Antigravity vs Claude Code vs OpenCode"
+	Rows      []cmpRow
+	Tools     []agentTools
+	DualHours string
+	DualPct   string // share of active time with 2+ agents at once
+	HasData   bool
 }
 
 // rangeDayKeys returns the local day keys covered by rng, or nil for all-time.
@@ -95,13 +108,28 @@ func sumSource(days map[string]*scanner.SourceDay, keys map[string]bool) sourceT
 	return t
 }
 
-func shareRow(label string, a, c float64, fa, fc string) cmpRow {
-	r := cmpRow{Label: label, Agy: fa, Claude: fc, AgyPct: 50, ClaudePct: 50}
-	if a+c > 0 {
-		r.AgyPct = int(math.Round(a / (a + c) * 100))
-		r.ClaudePct = 100 - r.AgyPct
+// shareRow builds one metric row across agents. Ties for the top don't lead.
+func shareRow(label string, keys []string, vals []float64, texts []string) cmpRow {
+	r := cmpRow{Label: label}
+	var total, top float64
+	for _, v := range vals {
+		total += v
+		top = math.Max(top, v)
 	}
-	r.AgyLeads, r.CCLeads = a > c, c > a
+	leaders := 0
+	for _, v := range vals {
+		if v == top && top > 0 {
+			leaders++
+		}
+	}
+	for i, k := range keys {
+		c := cmpCell{Key: k, Text: texts[i]}
+		if total > 0 {
+			c.Pct = math.Round(vals[i]/total*1000) / 10
+		}
+		c.Leads = leaders == 1 && vals[i] == top
+		r.Cells = append(r.Cells, c)
+	}
 	return r
 }
 
@@ -136,10 +164,47 @@ func topTools(m map[string]int, n int) []toolRow {
 	return out
 }
 
-func buildCompare(agg *scanner.Aggregate, rng string) compareView {
+// buildCompare compares the given agents (tracked ones, in display order)
+// over rng.
+func buildCompare(agg *scanner.Aggregate, rng string, agents []string) compareView {
 	keys := rangeDayKeys(rng)
-	agy := sumSource(agg.SourceDays["antigravity"], keys)
-	cc := sumSource(agg.SourceDays["claude"], keys)
+	v := compareView{DualPct: "0%"}
+	totals := make([]sourceTotals, len(agents))
+	var names []string
+	var sumActive int64
+	for i, a := range agents {
+		totals[i] = sumSource(agg.SourceDays[a], keys)
+		v.Agents = append(v.Agents, cmpAgent{Key: a, Name: config.AgentName(a)})
+		names = append(names, config.AgentName(a))
+		sumActive += totals[i].ActiveMs
+		if totals[i].ActiveMs > 0 || totals[i].Tokens > 0 {
+			v.HasData = true
+		}
+	}
+	v.Title = strings.Join(names, " vs ")
+	if len(agents) == 1 {
+		v.Title = names[0]
+	}
+
+	row := func(label string, val func(sourceTotals) float64, txt func(sourceTotals) string) cmpRow {
+		vals := make([]float64, len(agents))
+		texts := make([]string, len(agents))
+		for i, t := range totals {
+			vals[i], texts[i] = val(t), txt(t)
+		}
+		return shareRow(label, agents, vals, texts)
+	}
+	v.Rows = []cmpRow{
+		row("Active time", func(t sourceTotals) float64 { return float64(t.ActiveMs) }, func(t sourceTotals) string { return format.FmtHours(t.ActiveMs) }),
+		row("Sessions", func(t sourceTotals) float64 { return float64(t.Sessions) }, func(t sourceTotals) string { return format.FmtNum(int64(t.Sessions)) }),
+		row("Prompts", func(t sourceTotals) float64 { return float64(t.Prompts) }, func(t sourceTotals) string { return format.FmtNum(int64(t.Prompts)) }),
+		row("Tokens", func(t sourceTotals) float64 { return float64(t.Tokens) }, func(t sourceTotals) string { return format.FmtNum(t.Tokens) }),
+		row("API equivalent", func(t sourceTotals) float64 { return t.Cost }, func(t sourceTotals) string { return pricing.FmtCost(t.Cost) }),
+		row("Avg session", func(t sourceTotals) float64 { return float64(t.avgSessionMs()) }, func(t sourceTotals) string { return fmtSessionLen(t.avgSessionMs()) }),
+	}
+	for i, a := range agents {
+		v.Tools = append(v.Tools, agentTools{Key: a, Name: config.AgentName(a), Tools: topTools(totals[i].Tools, 5)})
+	}
 
 	var dual int64
 	if keys == nil {
@@ -151,24 +216,9 @@ func buildCompare(agg *scanner.Aggregate, rng string) compareView {
 			}
 		}
 	}
-
-	v := compareView{
-		HasData: agy.ActiveMs+cc.ActiveMs > 0 || agy.Tokens+cc.Tokens > 0,
-		Rows: []cmpRow{
-			shareRow("Active time", float64(agy.ActiveMs), float64(cc.ActiveMs), format.FmtHours(agy.ActiveMs), format.FmtHours(cc.ActiveMs)),
-			shareRow("Sessions", float64(agy.Sessions), float64(cc.Sessions), format.FmtNum(int64(agy.Sessions)), format.FmtNum(int64(cc.Sessions))),
-			shareRow("Prompts", float64(agy.Prompts), float64(cc.Prompts), format.FmtNum(int64(agy.Prompts)), format.FmtNum(int64(cc.Prompts))),
-			shareRow("Tokens", float64(agy.Tokens), float64(cc.Tokens), format.FmtNum(agy.Tokens), format.FmtNum(cc.Tokens)),
-			shareRow("API equivalent", agy.Cost, cc.Cost, pricing.FmtCost(agy.Cost), pricing.FmtCost(cc.Cost)),
-			shareRow("Avg session", float64(agy.avgSessionMs()), float64(cc.avgSessionMs()), fmtSessionLen(agy.avgSessionMs()), fmtSessionLen(cc.avgSessionMs())),
-		},
-		AgyTools:    topTools(agy.Tools, 5),
-		ClaudeTools: topTools(cc.Tools, 5),
-		DualHours:   format.FmtHours(dual),
-		DualPct:     "0%",
-	}
-	// Overlap counts once in each agent's time, so compare it to the union.
-	if union := agy.ActiveMs + cc.ActiveMs - dual; union > 0 && dual > 0 {
+	v.DualHours = format.FmtHours(dual)
+	// Overlap is counted in each agent's time, so compare it to the union.
+	if union := sumActive - dual; union > 0 && dual > 0 {
 		if pct := float64(dual) / float64(union) * 100; pct < 1 {
 			v.DualPct = "<1%"
 		} else {
@@ -176,6 +226,17 @@ func buildCompare(agg *scanner.Aggregate, rng string) compareView {
 		}
 	}
 	return v
+}
+
+// trackedAgents lists the agents enabled in config, in display order.
+func trackedAgents(cfg config.Config) []string {
+	var out []string
+	for _, a := range config.Agents {
+		if cfg.Sources.Tracks(a) {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // shortTool prettifies a tool id and drops MCP server prefixes, so
@@ -231,6 +292,7 @@ func listRunning(cfg config.Config, discordID string) []runningView {
 	sessions := state.ListSessions(state.ListOptions{
 		IncludeAntigravity: cfg.Sources.WantAntigravity(),
 		IncludeClaude:      cfg.Sources.WantClaude(),
+		IncludeOpenCode:    cfg.Sources.WantOpenCode(),
 		IncludeClaudeRPC:   true,
 	})
 	now := time.Now().UnixMilli()
@@ -263,11 +325,14 @@ func listRunning(cfg config.Config, discordID string) []runningView {
 		if v.StatusText == "" {
 			v.StatusText = "Working"
 		}
-		if s.Source == "claude" {
+		switch s.Source {
+		case "claude":
 			v.SourceKey, v.Source = "claude", "Claude Code"
 			if s.Model == "" {
 				v.Model = "Claude"
 			}
+		case "opencode":
+			v.SourceKey, v.Source = "opencode", "OpenCode"
 		}
 		if s.Cwd != "" {
 			v.Project, v.Path = filepath.Base(s.Cwd), s.Cwd

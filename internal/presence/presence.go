@@ -202,6 +202,11 @@ func ResolveLargeImageKeyForSource(cfg config.Config, source, status, model stri
 			return v
 		}
 	}
+	if source == "opencode" && cfg.OpenCodeStatusAssets != nil {
+		if v := cfg.OpenCodeStatusAssets[status]; v != "" {
+			return v
+		}
+	}
 	if source == "claude" && cfg.ClaudeStatusAssets != nil {
 		if v := cfg.ClaudeStatusAssets[status]; v != "" {
 			return v
@@ -259,6 +264,9 @@ func PickDualSnapshots(sessions []state.SessionState, live []state.LiveSession, 
 		if s.LastActivity > 0 && nowMs-s.LastActivity > staleMs {
 			continue
 		}
+		if s.Source == "opencode" {
+			continue // not part of the Antigravity + Claude Code dual model
+		}
 		if s.Source == "claude" {
 			if bestCC == nil || s.LastActivity > bestCC.LastActivity {
 				bestCC = s
@@ -285,7 +293,7 @@ func PickDualSnapshots(sessions []state.SessionState, live []state.LiveSession, 
 	for _, ls := range live {
 		if ls.Source == "claude" && cc == nil {
 			cc = &state.SessionSnapshot{Cwd: ls.Cwd, Model: "claude", Status: "working"}
-		} else if ls.Source != "claude" && agy == nil {
+		} else if ls.Source == "antigravity" && agy == nil {
 			agy = &state.SessionSnapshot{Cwd: ls.Cwd, Model: "gemini", Status: "working"}
 		}
 	}
@@ -323,8 +331,8 @@ func ComputeActiveSources(sessions []state.SessionState, live []state.LiveSessio
 	if staleMs < 60_000 {
 		staleMs = 5 * 60_000
 	}
-	wantAgy := cfg.Sources.WantAntigravity()
-	wantClaude := cfg.Sources.WantClaude()
+	wantAgy := cfg.ShowOnDiscord("antigravity")
+	wantClaude := cfg.ShowOnDiscord("claude")
 
 	for _, s := range sessions {
 		if s.AgentClosed || s.ClaudeClosed || s.Status == "stale" {
@@ -337,7 +345,7 @@ func ComputeActiveSources(sessions []state.SessionState, live []state.LiveSessio
 			if wantClaude {
 				claudeOn = true
 			}
-		} else if wantAgy {
+		} else if s.Source != "opencode" && wantAgy {
 			agyOn = true
 		}
 	}
@@ -384,15 +392,18 @@ func ResolveAppName(st state.SessionState, cfg config.Config) string {
 	if !cfg.IsDynamicAppName() {
 		return base
 	}
+	if st.Source == "opencode" {
+		return "OpenCode"
+	}
 	agyOn := st.AntigravityActive
 	claudeOn := st.ClaudeActive
 	if !st.SourcesComputed {
 		for _, ls := range st.LiveSessions {
 			if ls.Source == "claude" {
-				if cfg.Sources.WantClaude() {
+				if cfg.ShowOnDiscord("claude") {
 					claudeOn = true
 				}
-			} else if cfg.Sources.WantAntigravity() {
+			} else if cfg.ShowOnDiscord("antigravity") {
 				agyOn = true
 			}
 		}
@@ -450,4 +461,30 @@ func ResolveDiscordImageKey(cfg config.Config, source, status, model string) str
 		return DefaultPublicAntigravityIcon
 	}
 	return raw
+}
+
+// DiscordListOptions lists only the sessions allowed to drive Rich Presence
+// (tracked and not hidden from Discord in Settings).
+func DiscordListOptions(cfg config.Config) state.ListOptions {
+	return state.ListOptions{
+		IncludeAntigravity: cfg.ShowOnDiscord("antigravity"),
+		IncludeClaude:      cfg.ShowOnDiscord("claude"),
+		IncludeOpenCode:    cfg.ShowOnDiscord("opencode"),
+		IncludeClaudeRPC:   true,
+	}
+}
+
+// FilterLiveForDiscord drops live transcripts from agents hidden from Discord.
+func FilterLiveForDiscord(live []state.LiveSession, cfg config.Config) []state.LiveSession {
+	out := live[:0:0]
+	for _, ls := range live {
+		src := ls.Source
+		if src != "claude" && src != "opencode" {
+			src = "antigravity"
+		}
+		if cfg.ShowOnDiscord(src) {
+			out = append(out, ls)
+		}
+	}
+	return out
 }

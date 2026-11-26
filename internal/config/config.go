@@ -14,6 +14,7 @@ import (
 type SourcesConfig struct {
 	Antigravity *bool `json:"antigravity,omitempty"`
 	Claude      *bool `json:"claude,omitempty"`
+	OpenCode    *bool `json:"opencode,omitempty"`
 }
 
 func (s SourcesConfig) WantAntigravity() bool {
@@ -22,6 +23,63 @@ func (s SourcesConfig) WantAntigravity() bool {
 
 func (s SourcesConfig) WantClaude() bool {
 	return s.Claude == nil || *s.Claude
+}
+
+func (s SourcesConfig) WantOpenCode() bool {
+	return s.OpenCode == nil || *s.OpenCode
+}
+
+// Agents are the coding agents vibe-rpc knows, in display order.
+var Agents = []string{"antigravity", "claude", "opencode"}
+
+// AgentName is an agent's display name.
+func AgentName(key string) string {
+	switch key {
+	case "claude":
+		return "Claude Code"
+	case "opencode":
+		return "OpenCode"
+	}
+	return "Antigravity"
+}
+
+// Tracks reports whether vibe-rpc records an agent at all (stats, dashboard,
+// notch). Unknown sources fall under Antigravity, the original default.
+func (s SourcesConfig) Tracks(agent string) bool {
+	switch agent {
+	case "claude":
+		return s.WantClaude()
+	case "opencode":
+		return s.WantOpenCode()
+	}
+	return s.WantAntigravity()
+}
+
+// DiscordSourcesConfig picks which tracked agents may appear in Discord Rich
+// Presence. A hidden agent is still tracked; it just never drives the card.
+type DiscordSourcesConfig struct {
+	Antigravity *bool `json:"antigravity,omitempty"`
+	Claude      *bool `json:"claude,omitempty"`
+	OpenCode    *bool `json:"opencode,omitempty"`
+}
+
+func (d DiscordSourcesConfig) allows(agent string) bool {
+	var b *bool
+	switch agent {
+	case "claude":
+		b = d.Claude
+	case "opencode":
+		b = d.OpenCode
+	default:
+		b = d.Antigravity
+	}
+	return b == nil || *b
+}
+
+// ShowOnDiscord reports whether agent may appear in Rich Presence: it must be
+// tracked and not hidden from Discord.
+func (c Config) ShowOnDiscord(agent string) bool {
+	return c.Sources.Tracks(agent) && c.DiscordSources.allows(agent)
 }
 
 type GoalsConfig struct {
@@ -120,43 +178,46 @@ type PresenceConfig struct {
 }
 
 type Config struct {
-	ClientID                string            `json:"clientId"`
-	AppName                 string            `json:"appName"`
-	Sources                 SourcesConfig     `json:"sources"`
-	DynamicAppName          *bool             `json:"dynamicAppName,omitempty"`
-	UpdateIntervalMs        int               `json:"updateIntervalMs"`
-	RotationIntervalMs      int               `json:"rotationIntervalMs"`
-	Autostart               *bool             `json:"autostart,omitempty"`
-	MinActivityGapMs        int               `json:"minActivityGapMs"`
-	MaxActivityWrites       int               `json:"maxActivityWrites"`
-	ActivityWindowMs        int               `json:"activityWindowMs"`
-	PresenceKeepaliveSec    *int              `json:"presenceKeepaliveSec,omitempty"`
-	RescanIntervalSec       int               `json:"rescanIntervalSec"`
-	IdleThresholdSec        int               `json:"idleThresholdSec"`
-	StaleSessionMin         int               `json:"staleSessionMin"`
-	LiveSessionThresholdSec int               `json:"liveSessionThresholdSec,omitempty"`
-	IdleWhenOpen            bool              `json:"idleWhenOpen"`
-	ProcessDetection        *bool             `json:"processDetection,omitempty"`
-	HideWhenStale           *bool             `json:"hideWhenStale,omitempty"`
-	NotificationWindowSec   int               `json:"notificationWindowSec"`
-	ShippedFrameSec         int               `json:"shippedFrameSec"`
-	Goals                   GoalsConfig       `json:"goals"`
-	Budget                  BudgetConfig      `json:"budget"`
-	Webhook                 WebhookConfig     `json:"webhook"`
-	Notify                  NotifyConfig      `json:"notify"`
-	Triggers                []TriggerConfig   `json:"triggers,omitempty"`
-	TriggerFrameSec         int               `json:"triggerFrameSec"`
-	Privacy                 PrivacyConfig     `json:"privacy"`
-	Notch                   NotchConfig       `json:"notch"`
-	ShowElapsed             *bool             `json:"showElapsed,omitempty"`
-	ShowPartySize           *bool             `json:"showPartySize,omitempty"`
-	ActivityType            int               `json:"activityType"`
-	GifBaseURL              string            `json:"gifBaseUrl,omitempty"`
-	StatusAssets            map[string]string `json:"statusAssets"`
-	ClaudeStatusAssets      map[string]string `json:"claudeStatusAssets,omitempty"`
-	ModelAssets             map[string]string `json:"modelAssets,omitempty"`
-	Presence                PresenceConfig    `json:"presence"`
-	StatusIcons             map[string]string `json:"statusIcons"`
+	ClientID                string               `json:"clientId"`
+	AppName                 string               `json:"appName"`
+	Sources                 SourcesConfig        `json:"sources"`
+	DiscordSources          DiscordSourcesConfig `json:"discordSources"`
+	DynamicAppName          *bool                `json:"dynamicAppName,omitempty"`
+	UpdateIntervalMs        int                  `json:"updateIntervalMs"`
+	RotationIntervalMs      int                  `json:"rotationIntervalMs"`
+	Autostart               *bool                `json:"autostart,omitempty"`
+	MinActivityGapMs        int                  `json:"minActivityGapMs"`
+	MaxActivityWrites       int                  `json:"maxActivityWrites"`
+	ActivityWindowMs        int                  `json:"activityWindowMs"`
+	PresenceKeepaliveSec    *int                 `json:"presenceKeepaliveSec,omitempty"`
+	RescanIntervalSec       int                  `json:"rescanIntervalSec"`
+	IdleThresholdSec        int                  `json:"idleThresholdSec"`
+	StaleSessionMin         int                  `json:"staleSessionMin"`
+	LiveSessionThresholdSec int                  `json:"liveSessionThresholdSec,omitempty"`
+	IdleWhenOpen            bool                 `json:"idleWhenOpen"`
+	ProcessDetection        *bool                `json:"processDetection,omitempty"`
+	HideWhenStale           *bool                `json:"hideWhenStale,omitempty"`
+	NotificationWindowSec   int                  `json:"notificationWindowSec"`
+	ShippedFrameSec         int                  `json:"shippedFrameSec"`
+	Goals                   GoalsConfig          `json:"goals"`
+	Budget                  BudgetConfig         `json:"budget"`
+	Webhook                 WebhookConfig        `json:"webhook"`
+	Notify                  NotifyConfig         `json:"notify"`
+	Triggers                []TriggerConfig      `json:"triggers,omitempty"`
+	TriggerFrameSec         int                  `json:"triggerFrameSec"`
+	Privacy                 PrivacyConfig        `json:"privacy"`
+	Notch                   NotchConfig          `json:"notch"`
+	ShowElapsed             *bool                `json:"showElapsed,omitempty"`
+	ShowPartySize           *bool                `json:"showPartySize,omitempty"`
+	ActivityType            int                  `json:"activityType"`
+	GifBaseURL              string               `json:"gifBaseUrl,omitempty"`
+	StatusAssets            map[string]string    `json:"statusAssets"`
+	ClaudeStatusAssets      map[string]string    `json:"claudeStatusAssets,omitempty"`
+	// OpenCodeStatusAssets is the status art for OpenCode sessions.
+	OpenCodeStatusAssets map[string]string `json:"openCodeStatusAssets,omitempty"`
+	ModelAssets          map[string]string `json:"modelAssets,omitempty"`
+	Presence             PresenceConfig    `json:"presence"`
+	StatusIcons          map[string]string `json:"statusIcons"`
 }
 
 func BoolPtr(v bool) *bool { return &v }
@@ -242,6 +303,15 @@ func Default() Config {
 			"idle":         "/assets/gifs/claude-idle.gif",
 			"stale":        "/assets/gifs/claude-stale.gif",
 			"notification": "/assets/gifs/claude-notification.gif",
+		},
+		OpenCodeStatusAssets: map[string]string{
+			"working":      "/assets/gifs/opencode-working.gif",
+			"thinking":     "/assets/gifs/opencode-thinking.gif",
+			"compacting":   "/assets/gifs/opencode-compacting.gif",
+			"shipped":      "/assets/gifs/opencode-shipped.gif",
+			"idle":         "/assets/gifs/opencode-idle.gif",
+			"stale":        "/assets/gifs/opencode-stale.gif",
+			"notification": "/assets/gifs/opencode-notification.gif",
 		},
 		Presence: PresenceConfig{
 			LargeImageKey:  "/assets/gifs/agy-idle.gif",

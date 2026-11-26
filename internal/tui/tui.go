@@ -57,6 +57,7 @@ func loadSnapshot() (config.Config, *scanner.Aggregate, state.SessionState, int)
 	sessions := state.ListSessions(state.ListOptions{
 		IncludeAntigravity: cfg.Sources.WantAntigravity(),
 		IncludeClaude:      cfg.Sources.WantClaude(),
+		IncludeOpenCode:    cfg.Sources.WantOpenCode(),
 		IncludeClaudeRPC:   true,
 	})
 	idleMs := int64(cfg.IdleThresholdSec) * 1000

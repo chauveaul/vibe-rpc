@@ -59,3 +59,24 @@ func TestAggregateFromSourceDaysAndDual(t *testing.T) {
 		t.Fatalf("claude day = %+v", c)
 	}
 }
+
+func TestMultiAgentOverlap(t *testing.T) {
+	min := int64(60_000)
+	base := time.Date(2026, 3, 10, 12, 0, 0, 0, time.Local).UnixMilli()
+	spans := map[string][][2]int64{
+		"antigravity": {{base, base + 60*min}},
+		"claude":      {{base + 30*min, base + 90*min}},
+		"opencode":    {{base + 80*min, base + 120*min}, {base + 85*min, base + 100*min}}, // self-overlap must not count
+	}
+	byDay := map[string]int64{}
+	// agy∩claude = 30m (12:30–13:00); claude∩opencode = 10m (13:20–13:30).
+	if got := multiAgentByDay(spans, byDay); got != 40*min {
+		t.Fatalf("overlap = %d min, want 40", got/min)
+	}
+	if byDay[DayKey(base)] != 40*min {
+		t.Fatalf("byDay = %v", byDay)
+	}
+	if got := multiAgentByDay(map[string][][2]int64{"opencode": {{base, base + 60*min}, {base + 10*min, base + 20*min}}}, nil); got != 0 {
+		t.Fatalf("one agent alone is never dual, got %d", got)
+	}
+}

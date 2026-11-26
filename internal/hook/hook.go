@@ -318,12 +318,13 @@ func ProcessEvent(event string, in Payload, nowMs int64, explicitSource string) 
 
 	case "PreToolUse":
 		toolName, toolArgs := extractTool(in)
-		file := strArg(toolArgs, "Path", "AbsolutePath", "TargetFile", "file_path", "path", "notebook_path")
+		file := strArg(toolArgs, "Path", "AbsolutePath", "TargetFile", "file_path", "filePath", "path", "notebook_path")
 		shellCmd := ""
-		if toolName == "run_command" || toolName == "Bash" {
+		if toolName == "run_command" || toolName == "Bash" || toolName == "bash" {
 			shellCmd = strArg(toolArgs, "CommandLine", "command")
 		}
-		isAsk := toolName == "ask_question" || toolName == "AskUserQuestion"
+		// Antigravity's ask_question, Claude Code's AskUserQuestion, OpenCode's question.
+		isAsk := toolName == "ask_question" || toolName == "AskUserQuestion" || (toolName == "question" && source == "opencode")
 		askText := ""
 		if isAsk {
 			askText = questionText(toolArgs)
@@ -380,9 +381,9 @@ func ProcessEvent(event string, in Payload, nowMs int64, explicitSource string) 
 	case "PostToolUse", "PostToolUseFailure":
 		failed := event == "PostToolUseFailure" || in.Error != ""
 		toolName, toolArgs := extractTool(in)
-		file := strArg(toolArgs, "Path", "AbsolutePath", "TargetFile", "file_path", "path", "notebook_path")
+		file := strArg(toolArgs, "Path", "AbsolutePath", "TargetFile", "file_path", "filePath", "path", "notebook_path")
 		shellCmd := ""
-		if toolName == "run_command" || toolName == "Bash" {
+		if toolName == "run_command" || toolName == "Bash" || toolName == "bash" {
 			shellCmd = strArg(toolArgs, "CommandLine", "command")
 		}
 		shipKind, shipBranch, shipSubject := "", "", ""
@@ -481,6 +482,15 @@ func ProcessEvent(event string, in Payload, nowMs int64, explicitSource string) 
 			s.LastActivity = nowMs
 			s.AgentClosed = false
 			s.ClaudeClosed = false
+		})
+
+	case "PermissionReplied": // OpenCode: the user answered a permission prompt
+		update(func(s *state.SessionState, _ bool) {
+			if s.Status == "notification" && s.AttentionKind == "permission" {
+				s.Status = "working"
+				s.AttentionKind, s.AttentionText = "", ""
+			}
+			s.LastActivity = nowMs
 		})
 
 	case "SessionEnd":

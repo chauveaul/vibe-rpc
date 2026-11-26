@@ -144,7 +144,7 @@
 
 /* Side-by-side Per-Agent GIF Panels (Antigravity + Claude Code) */
 .gif-pair {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 14px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 14px;
 }
 .gif-panel {
   background: rgba(10, 11, 15, 0.42);
@@ -251,6 +251,28 @@
   font-family: var(--font-mono); font-size: 11.5px; color: #fff;
   background: rgba(255, 255, 255, 0.10); padding: 2px 7px; border-radius: 6px;
 }
+
+/* Agents table */
+.agents-table { width: 100%; border-collapse: collapse; margin-top: 4px; font-size: 13.5px; }
+.agents-table th, .agents-table td { padding: 10px 8px; border-bottom: 1px solid var(--border-soft); text-align: left; }
+.agents-table thead th { font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint); }
+.agents-table thead th:nth-child(n+3), .agents-table td:nth-child(n+3) { text-align: center; width: 130px; }
+.agents-table tbody tr:last-child th, .agents-table tbody tr:last-child td { border-bottom: none; }
+.agents-table tr.off .agent-name { color: var(--text-mute); }
+.agent-name { display: inline-flex; align-items: center; gap: 9px; font-weight: 600; color: #fff; }
+.agents-table .found { color: var(--green); font-size: 12.5px; }
+.agents-table .missing { color: var(--text-faint); font-size: 12.5px; }
+.src-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.src-dot.antigravity { background: #f5f5f7; }
+.src-dot.claude { background: #8c9099; }
+.src-dot.opencode { background: transparent; box-shadow: inset 0 0 0 1.5px #c7cad1; }
+.switch { position: relative; display: inline-block; width: 36px; height: 21px; cursor: pointer; }
+.switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.switch span { position: absolute; inset: 0; border-radius: 999px; background: rgba(255, 255, 255, 0.12); border: 1px solid var(--border); transition: background 0.16s; }
+.switch span::after { content: ''; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%; background: var(--text-mute); transition: transform 0.16s, background 0.16s; }
+.switch input:checked + span { background: rgba(74, 222, 128, 0.35); border-color: rgba(74, 222, 128, 0.5); }
+.switch input:checked + span::after { transform: translateX(15px); background: #fff; }
+.switch input:focus-visible + span { outline: 2px solid rgba(255, 255, 255, 0.6); outline-offset: 2px; }
 
 /* VibeNotch */
 .notch-row { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; }

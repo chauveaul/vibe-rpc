@@ -114,3 +114,35 @@ func TestQuestionTextSurvivesFollowUpPermissionNotification(t *testing.T) {
 		t.Fatalf("question text was overwritten: %+v", st)
 	}
 }
+
+func TestOpenCodeEvents(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("VIBE_RPC_STATE_DIR", tmp)
+	t.Setenv("VIBE_RPC_DATA_DIR", filepath.Join(tmp, "data"))
+	t.Setenv("VIBE_RPC_NO_AUTOSTART", "1")
+	run := func(event, body string) {
+		var out bytes.Buffer
+		RunCLI(event, "opencode", bytes.NewBufferString(body), &out)
+	}
+	run("PreToolUse", `{"session_id":"ses_1","cwd":"/w/api","model":"glm-5.3-flash-free","tool_name":"edit","tool_input":{"filePath":"/w/api/main.go"}}`)
+	st := state.Read("ses_1")
+	if st.Source != "opencode" || st.Status != "working" || st.CurrentFile != "main.go" || st.Model != "glm-5.3-flash-free" {
+		t.Fatalf("tool event: %+v", st)
+	}
+	run("PreToolUse", `{"session_id":"ses_1","cwd":"/w/api","tool_name":"bash","tool_input":{"command":"go test ./..."}}`)
+	if st := state.Read("ses_1"); st.LastBashCommand != "go test ./..." {
+		t.Fatalf("bash not recorded: %+v", st)
+	}
+	run("Notification", `{"session_id":"ses_1","cwd":"/w/api","message":"OpenCode needs permission: Run go test","notification_type":"permission_prompt"}`)
+	if st := state.Read("ses_1"); st.Status != "notification" || st.AttentionKind != "permission" {
+		t.Fatalf("permission: %+v", st)
+	}
+	run("PermissionReplied", `{"session_id":"ses_1","cwd":"/w/api"}`)
+	if st := state.Read("ses_1"); st.Status == "notification" || st.AttentionKind != "" {
+		t.Fatalf("permission reply should clear the alert: %+v", st)
+	}
+	run("PreToolUse", `{"session_id":"ses_1","cwd":"/w/api","tool_name":"question","tool_input":{"questions":[{"question":"Use Postgres?"}]}}`)
+	if st := state.Read("ses_1"); st.AttentionKind != "question" || st.AttentionText != "Use Postgres?" {
+		t.Fatalf("question: %+v", st)
+	}
+}

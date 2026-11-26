@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/meze/agy-rpc/internal/state"
+	"github.com/chauveaul/vibe-rpc/internal/state"
 )
 
 func TestOutputContracts(t *testing.T) {
@@ -28,9 +28,9 @@ func TestOutputContracts(t *testing.T) {
 
 func TestRunCLIAntigravityAndClaude(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("AGY_RPC_STATE_DIR", tmp)
-	t.Setenv("AGY_RPC_DATA_DIR", filepath.Join(tmp, "data"))
-	t.Setenv("AGY_RPC_NO_AUTOSTART", "1")
+	t.Setenv("VIBE_RPC_STATE_DIR", tmp)
+	t.Setenv("VIBE_RPC_DATA_DIR", filepath.Join(tmp, "data"))
+	t.Setenv("VIBE_RPC_NO_AUTOSTART", "1")
 
 	var out bytes.Buffer
 	in := bytes.NewBufferString(`{"conversationId":"conv-1","workspacePaths":["/tmp/demo"],"hookEventName":"PreToolUse","toolCall":{"name":"edit_file","args":{"Path":"/tmp/demo/main.go"}}}`)

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 )
 
 const Version = "2.0.0"
@@ -17,34 +18,57 @@ func HomeDir() string {
 }
 
 func UserConfigDir() string {
+	dir := userConfigDirFor("vibe-rpc")
+	migrateOnce(userConfigDirFor("agy-rpc"), dir)
+	return dir
+}
+
+// migrateOnce moves a pre-rename agy-rpc directory to its vibe-rpc location
+// exactly once per process, only when the new location does not exist yet.
+var migrated sync.Map
+
+func migrateOnce(oldDir, newDir string) {
+	if _, loaded := migrated.LoadOrStore(newDir, true); loaded {
+		return
+	}
+	if _, err := os.Stat(newDir); err == nil {
+		return
+	}
+	if fi, err := os.Stat(oldDir); err == nil && fi.IsDir() {
+		_ = os.MkdirAll(filepath.Dir(newDir), 0o755)
+		_ = os.Rename(oldDir, newDir)
+	}
+}
+
+func userConfigDirFor(name string) string {
 	switch runtime.GOOS {
 	case "windows":
 		if appdata := os.Getenv("APPDATA"); appdata != "" {
-			return filepath.Join(appdata, "agy-rpc")
+			return filepath.Join(appdata, name)
 		}
-		return filepath.Join(HomeDir(), "AppData", "Roaming", "agy-rpc")
+		return filepath.Join(HomeDir(), "AppData", "Roaming", name)
 	case "darwin":
-		return filepath.Join(HomeDir(), "Library", "Application Support", "agy-rpc")
+		return filepath.Join(HomeDir(), "Library", "Application Support", name)
 	default:
 		if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-			return filepath.Join(xdg, "agy-rpc")
+			return filepath.Join(xdg, name)
 		}
-		return filepath.Join(HomeDir(), ".config", "agy-rpc")
+		return filepath.Join(HomeDir(), ".config", name)
 	}
 }
 
 func ConfigPath() string {
-	if p := os.Getenv("AGY_RPC_CONFIG"); p != "" {
+	if p := os.Getenv("VIBE_RPC_CONFIG"); p != "" {
 		return p
 	}
 	return filepath.Join(UserConfigDir(), "config.json")
 }
 
 func StateDir() string {
-	if d := os.Getenv("AGY_RPC_STATE_DIR"); d != "" {
+	if d := os.Getenv("VIBE_RPC_STATE_DIR"); d != "" {
 		return d
 	}
-	return filepath.Join(os.TempDir(), "agy-rpc")
+	return filepath.Join(os.TempDir(), "vibe-rpc")
 }
 
 func StatePath() string      { return filepath.Join(StateDir(), "state.json") }
@@ -55,10 +79,12 @@ func PausePath() string      { return filepath.Join(StateDir(), "pause.json") }
 func SpawnMarker() string    { return filepath.Join(StateDir(), "daemon-spawn.ts") }
 
 func DataDir() string {
-	if d := os.Getenv("AGY_RPC_DATA_DIR"); d != "" {
+	if d := os.Getenv("VIBE_RPC_DATA_DIR"); d != "" {
 		return d
 	}
-	return filepath.Join(HomeDir(), ".agy-rpc")
+	dir := filepath.Join(HomeDir(), ".vibe-rpc")
+	migrateOnce(filepath.Join(HomeDir(), ".agy-rpc"), dir)
+	return dir
 }
 
 func AggregatePath() string   { return filepath.Join(DataDir(), "aggregate.json") }
@@ -66,7 +92,7 @@ func ScanCachePath() string   { return filepath.Join(DataDir(), "scan-cache.json
 func EventsLogPath() string   { return filepath.Join(DataDir(), "events.jsonl") }
 func SessionCwdsPath() string { return filepath.Join(DataDir(), "session-cwds.json") }
 func PrivateListPath() string {
-	if p := os.Getenv("AGY_RPC_PRIVATE_LIST"); p != "" {
+	if p := os.Getenv("VIBE_RPC_PRIVATE_LIST"); p != "" {
 		return p
 	}
 	return filepath.Join(DataDir(), "private-list.json")
@@ -105,9 +131,9 @@ func ClaudeRPCPidPath() string { return filepath.Join(ClaudeRPCStateDir(), "daem
 
 func CanonicalExeName() string {
 	if runtime.GOOS == "windows" {
-		return "agy-rpc.exe"
+		return "vibe-rpc.exe"
 	}
-	return "agy-rpc"
+	return "vibe-rpc"
 }
 
 func CanonicalInstallDir() string { return filepath.Join(UserConfigDir(), "bin") }

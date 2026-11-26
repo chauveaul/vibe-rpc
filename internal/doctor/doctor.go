@@ -11,13 +11,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/meze/agy-rpc/internal/config"
-	"github.com/meze/agy-rpc/internal/daemon"
-	"github.com/meze/agy-rpc/internal/discord"
-	"github.com/meze/agy-rpc/internal/install"
-	"github.com/meze/agy-rpc/internal/paths"
-	"github.com/meze/agy-rpc/internal/privacy"
-	"github.com/meze/agy-rpc/internal/scanner"
+	"github.com/chauveaul/vibe-rpc/internal/config"
+	"github.com/chauveaul/vibe-rpc/internal/daemon"
+	"github.com/chauveaul/vibe-rpc/internal/discord"
+	"github.com/chauveaul/vibe-rpc/internal/install"
+	"github.com/chauveaul/vibe-rpc/internal/paths"
+	"github.com/chauveaul/vibe-rpc/internal/privacy"
+	"github.com/chauveaul/vibe-rpc/internal/scanner"
 )
 
 type Status string
@@ -83,7 +83,7 @@ func checkClaudeRPCConflict() *Check {
 			Name:   "claude-rpc daemon",
 			Status: Warn,
 			Detail: fmt.Sprintf("claude-rpc daemon is also running (pid %d) — both daemons will compete for Discord Rich Presence", pid),
-			Fix:    "Stop claude-rpc (`claude-rpc stop`) so agy-rpc manages combined Antigravity + Claude Code presence cleanly",
+			Fix:    "Stop claude-rpc (`claude-rpc stop`) so vibe-rpc manages combined Antigravity + Claude Code presence cleanly",
 		}
 	}
 	return nil
@@ -97,7 +97,7 @@ func Run() []Check {
 	checks = append(checks, Check{
 		Name:   "Binary",
 		Status: OK,
-		Detail: fmt.Sprintf("agy-rpc v%s (%s, %s/%s) at %s", paths.Version, runtime.Version(), runtime.GOOS, runtime.GOARCH, exe),
+		Detail: fmt.Sprintf("vibe-rpc v%s (%s, %s/%s) at %s", paths.Version, runtime.Version(), runtime.GOOS, runtime.GOARCH, exe),
 	})
 
 	// 2. Config & Client ID
@@ -116,7 +116,7 @@ func Run() []Check {
 			Name:   "Config",
 			Status: Fail,
 			Detail: fmt.Sprintf("clientId is %s in %s", cidClass, paths.ConfigPath()),
-			Fix:    "Run `agy-rpc settings` or edit config.json to set a valid 17–21 digit Discord Application ID",
+			Fix:    "Run `vibe-rpc settings` or edit config.json to set a valid 17–21 digit Discord Application ID",
 		})
 	}
 
@@ -126,7 +126,7 @@ func Run() []Check {
 			Name:   "Antigravity hooks",
 			Status: Fail,
 			Detail: fmt.Sprintf("%s not found", paths.AgyHooksPath()),
-			Fix:    "Run `agy-rpc setup` or `agy-rpc doctor --fix`",
+			Fix:    "Run `vibe-rpc setup` or `vibe-rpc doctor --fix`",
 		})
 	} else {
 		var m map[string]any
@@ -141,7 +141,7 @@ func Run() []Check {
 				Name:   "Antigravity hooks",
 				Status: Fail,
 				Detail: fmt.Sprintf("%s exists but missing %q group", paths.AgyHooksPath(), install.AgyHookGroupKey),
-				Fix:    "Run `agy-rpc setup` or `agy-rpc doctor --fix`",
+				Fix:    "Run `vibe-rpc setup` or `vibe-rpc doctor --fix`",
 			})
 		}
 	}
@@ -153,9 +153,9 @@ func Run() []Check {
 				Name:   "Claude Code hooks",
 				Status: Warn,
 				Detail: fmt.Sprintf("%s not found (passive transcript & claude-rpc state tracking still active)", paths.ClaudeSettingsPath()),
-				Fix:    "Run `agy-rpc setup` to wire live Claude Code hooks",
+				Fix:    "Run `vibe-rpc setup` to wire live Claude Code hooks",
 			})
-		} else if strings.Contains(string(b), `"_agyRpc"`) || strings.Contains(string(b), "agy-rpc hook") {
+		} else if strings.Contains(string(b), `"_vibeRpc"`) || strings.Contains(string(b), "vibe-rpc hook") {
 			checks = append(checks, Check{
 				Name:   "Claude Code hooks",
 				Status: OK,
@@ -165,8 +165,8 @@ func Run() []Check {
 			checks = append(checks, Check{
 				Name:   "Claude Code hooks",
 				Status: Warn,
-				Detail: fmt.Sprintf("%s exists without agy-rpc hooks", paths.ClaudeSettingsPath()),
-				Fix:    "Run `agy-rpc setup` or `agy-rpc doctor --fix`",
+				Detail: fmt.Sprintf("%s exists without vibe-rpc hooks", paths.ClaudeSettingsPath()),
+				Fix:    "Run `vibe-rpc setup` or `vibe-rpc doctor --fix`",
 			})
 		}
 	}
@@ -190,7 +190,7 @@ func Run() []Check {
 			Name:   "Daemon",
 			Status: Warn,
 			Detail: "not running",
-			Fix:    "Run `agy-rpc start` or `agy-rpc doctor --fix`",
+			Fix:    "Run `vibe-rpc start` or `vibe-rpc doctor --fix`",
 		})
 	}
 
@@ -267,7 +267,7 @@ func Run() []Check {
 			Name:   "Aggregate cache",
 			Status: Warn,
 			Detail: "not built yet",
-			Fix:    "Run `agy-rpc scan`",
+			Fix:    "Run `vibe-rpc scan`",
 		})
 	}
 

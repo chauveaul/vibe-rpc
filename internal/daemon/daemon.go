@@ -17,18 +17,18 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 
-	"github.com/meze/agy-rpc/internal/config"
-	"github.com/meze/agy-rpc/internal/discord"
-	"github.com/meze/agy-rpc/internal/format"
-	"github.com/meze/agy-rpc/internal/gitinfo"
-	"github.com/meze/agy-rpc/internal/notify"
-	"github.com/meze/agy-rpc/internal/paths"
-	"github.com/meze/agy-rpc/internal/pause"
-	"github.com/meze/agy-rpc/internal/presence"
-	"github.com/meze/agy-rpc/internal/privacy"
-	"github.com/meze/agy-rpc/internal/proc"
-	"github.com/meze/agy-rpc/internal/scanner"
-	"github.com/meze/agy-rpc/internal/state"
+	"github.com/chauveaul/vibe-rpc/internal/config"
+	"github.com/chauveaul/vibe-rpc/internal/discord"
+	"github.com/chauveaul/vibe-rpc/internal/format"
+	"github.com/chauveaul/vibe-rpc/internal/gitinfo"
+	"github.com/chauveaul/vibe-rpc/internal/notify"
+	"github.com/chauveaul/vibe-rpc/internal/paths"
+	"github.com/chauveaul/vibe-rpc/internal/pause"
+	"github.com/chauveaul/vibe-rpc/internal/presence"
+	"github.com/chauveaul/vibe-rpc/internal/privacy"
+	"github.com/chauveaul/vibe-rpc/internal/proc"
+	"github.com/chauveaul/vibe-rpc/internal/scanner"
+	"github.com/chauveaul/vibe-rpc/internal/state"
 )
 
 const (
@@ -559,7 +559,7 @@ func BuildActivity(st state.SessionState, cfg config.Config, agg *scanner.Aggreg
 			concurrent = *st.LiveCount
 		}
 		if concurrent > 1 {
-			act.PartyID = "agy-rpc-sessions"
+			act.PartyID = "vibe-rpc-sessions"
 			act.PartySize = concurrent
 			act.PartyMax = concurrent
 		}

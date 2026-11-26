@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="vibe-rpc">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#17191f"/>
+      <stop offset="100%" stop-color="#08090c"/>
+    </linearGradient>
+    <linearGradient id="vGrad" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#a8aebc"/>
+    </linearGradient>
+    <linearGradient id="echoGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#dce0ea" stop-opacity="0.78"/>
+      <stop offset="100%" stop-color="#8b91a0" stop-opacity="0.45"/>
+    </linearGradient>
+    <radialGradient id="topSheen" cx="50%" cy="10%" r="60%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bg)" stroke="#ffffff" stroke-opacity="0.22" stroke-width="4"/>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#topSheen)"/>
+  <ellipse cx="256" cy="266" rx="152" ry="68" fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="5"/>
+  <path d="M204 150 L256 266 L308 150" fill="none" stroke="url(#echoGrad)" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M150 160 L256 374 L362 160" fill="none" stroke="url(#vGrad)" stroke-width="42" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="256" cy="124" r="14" fill="#ffffff"/>
+</svg>

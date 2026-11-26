@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/meze/agy-rpc/internal/config"
-	"github.com/meze/agy-rpc/internal/paths"
-	"github.com/meze/agy-rpc/internal/state"
+	"github.com/chauveaul/vibe-rpc/internal/config"
+	"github.com/chauveaul/vibe-rpc/internal/paths"
+	"github.com/chauveaul/vibe-rpc/internal/state"
 )
 
 const cacheTTL = 5 * time.Minute
@@ -141,7 +141,7 @@ func findProjectFile(cwd string) string {
 	}
 	dir := cwd
 	for {
-		for _, name := range []string{".agy-rpc.json", ".claude-rpc.json"} {
+		for _, name := range []string{".vibe-rpc.json", ".agy-rpc.json", ".claude-rpc.json"} {
 			cand := filepath.Join(dir, name)
 			if _, err := os.Stat(cand); err == nil {
 				return cand
@@ -240,7 +240,7 @@ func Resolve(cwd string, cfg config.Config) Resolution {
 	if proj != nil {
 		alias = proj.ProjectName
 		if proj.Visibility != "" {
-			return Resolution{Visibility: proj.Visibility, ProjectName: alias, Reason: ".agy-rpc.json"}
+			return Resolution{Visibility: proj.Visibility, ProjectName: alias, Reason: ".vibe-rpc.json"}
 		}
 	}
 	if cwd != "" {

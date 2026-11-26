@@ -11,15 +11,15 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/meze/agy-rpc/internal/config"
-	"github.com/meze/agy-rpc/internal/daemon"
-	"github.com/meze/agy-rpc/internal/format"
-	"github.com/meze/agy-rpc/internal/presence"
-	"github.com/meze/agy-rpc/internal/pricing"
-	"github.com/meze/agy-rpc/internal/proc"
-	"github.com/meze/agy-rpc/internal/scanner"
-	"github.com/meze/agy-rpc/internal/state"
-	"github.com/meze/agy-rpc/internal/stats"
+	"github.com/chauveaul/vibe-rpc/internal/config"
+	"github.com/chauveaul/vibe-rpc/internal/daemon"
+	"github.com/chauveaul/vibe-rpc/internal/format"
+	"github.com/chauveaul/vibe-rpc/internal/presence"
+	"github.com/chauveaul/vibe-rpc/internal/pricing"
+	"github.com/chauveaul/vibe-rpc/internal/proc"
+	"github.com/chauveaul/vibe-rpc/internal/scanner"
+	"github.com/chauveaul/vibe-rpc/internal/state"
+	"github.com/chauveaul/vibe-rpc/internal/stats"
 )
 
 var tabs = []string{"Now", "Today", "Week", "Streak", "Lifetime", "Cost", "Code"}
@@ -151,7 +151,7 @@ func (m model) View() string {
 	if m.pid > 0 {
 		dBadge = styleGood.Render(fmt.Sprintf("● daemon pid %d", m.pid))
 	}
-	b.WriteString(styleBrand.Render(" agy-rpc ") + "  " + dBadge + "\n\n")
+	b.WriteString(styleBrand.Render(" vibe-rpc ") + "  " + dBadge + "\n\n")
 
 	// Tab strip
 	var tabParts []string
@@ -315,7 +315,7 @@ func (m model) viewCost() string {
 		styleTitle.Render(fmt.Sprintf("ESTIMATED API-EQUIVALENT COST · %s", pricing.FmtCost(m.agg.EstimatedCost))),
 	}
 	if len(m.agg.ModelSplit) == 0 {
-		lines = append(lines, styleMute.Render("  No model usage recorded yet. Run `agy-rpc scan`."))
+		lines = append(lines, styleMute.Render("  No model usage recorded yet. Run `vibe-rpc scan`."))
 		return strings.Join(lines, "\n")
 	}
 	maxCost := m.agg.ModelSplit[0].Cost

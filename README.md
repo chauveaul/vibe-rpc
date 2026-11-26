@@ -1,4 +1,8 @@
-# agy-rpc
+<p align="center"><img src="./assets/vibe-rpc-icon.png" width="112" alt="vibe-rpc icon"></p>
+
+<h1 align="center">vibe-rpc</h1>
+
+<p align="center">Discord Rich Presence + coding analytics for <b>Google Antigravity</b> and <b>Claude Code</b>.</p>
 
 **100% Pure Go** Discord Rich Presence, live status tracking, and coding analytics for **Google Antigravity** and **Claude Code** — combined into one single native binary with **zero JavaScript/TypeScript** anywhere (even the local web dashboard, settings editor, and Wrapped story are pure Go SSR HTML + CSS).
 
@@ -16,27 +20,27 @@ Built to match the functionality, paper-and-ink aesthetic, customizability, and 
   - `/` — Editorial paper-and-ink dashboard with time ranges (`7d`/`30d`/`90d`/`1y`/`all`), live Discord preview rail, pure Go SVG activity & code churn charts, clickable 90-day heatmap day modal, project breakdown drawer, model cost split, language stack, achievements, and leaderboards.
   - `/settings` — Full visual settings editor for every status (`working`, `thinking`, `compacting`, `shipped`, `notification`, `idle`), live preview, extra rotation frames, custom buttons, source toggles, daemon start/stop/restart + log viewer, and per-workspace privacy (`Public` / `Name only` / `Hidden`).
   - `/wrapped` — Full-screen pure CSS animated Coding Wrapped story slides.
-- **Interactive Terminal Dashboard (`agy-rpc`)**
+- **Interactive Terminal Dashboard (`vibe-rpc`)**
   - Built with `bubbletea` + `lipgloss`: 7 tabs (`Now`, `Today`, `Week`, `Streak`, `Lifetime`, `Cost`, `Code`), live 3-second refresh, keyboard navigation.
-- **Built-in MCP Server (`agy-rpc mcp`)**
-  - Exposes `get_lifetime_stats`, `get_today`, `get_top_files`, `get_model_split`, and `get_recap` over stdio JSON-RPC; register globally with `agy-rpc mcp install`.
+- **Built-in MCP Server (`vibe-rpc mcp`)**
+  - Exposes `get_lifetime_stats`, `get_today`, `get_top_files`, `get_model_split`, and `get_recap` over stdio JSON-RPC; register globally with `vibe-rpc mcp install`.
 - **Shareable SVG Stat Cards & Exports**
-  - `agy-rpc badge`, `agy-rpc card`, `agy-rpc calendar`, `agy-rpc session-card`, `agy-rpc export --csv`, `agy-rpc recap`, `agy-rpc statusline`.
+  - `vibe-rpc badge`, `vibe-rpc card`, `vibe-rpc calendar`, `vibe-rpc session-card`, `vibe-rpc export --csv`, `vibe-rpc recap`, `vibe-rpc statusline`.
 
 ## Build & Install
 
-Requires Go 1.24+.
+Requires Go 1.26+.
 
 ```bash
-go build -o agy-rpc ./cmd/agy-rpc
+go build -o vibe-rpc ./cmd/vibe-rpc
 # or install into your $GOPATH/bin:
-go install ./cmd/agy-rpc
+go install ./cmd/vibe-rpc
 ```
 
 Then run one-time setup:
 
 ```bash
-./agy-rpc setup
+./vibe-rpc setup
 ```
 
 This seeds your config, wires Antigravity & Claude Code hooks, runs an in-process hook self-test, installs OS login autostart, scans your transcript history, and starts the background daemon.
@@ -45,23 +49,23 @@ This seeds your config, wires Antigravity & Claude Code hooks, runs an in-proces
 
 | Command | Description |
 | --- | --- |
-| `agy-rpc` | Launch the 7-tab Bubbletea TUI dashboard |
-| `agy-rpc setup` | Wire hooks, seed config, scan transcripts, start daemon |
-| `agy-rpc settings` | Open the zero-JS Settings editor (`:47475/settings`) |
-| `agy-rpc serve` | Open the zero-JS Web Dashboard (`:47475/`) |
-| `agy-rpc wrapped` | Open your Coding Wrapped story (`:47475/wrapped`) |
-| `agy-rpc status [--dump]` | Show daemon status & Discord preview |
-| `agy-rpc today` / `week` / `projects` | Terminal analytics summaries |
-| `agy-rpc recap [range]` | Standup-ready coding recap (`today`, `yesterday`, `week`, `7d`) |
-| `agy-rpc insights` | Habit & dual-agent insights |
-| `agy-rpc doctor [--fix]` | Diagnose and repair hooks, daemon, Discord IPC, and caches |
-| `agy-rpc scan [--force]` | Incremental or full transcript rescan |
-| `agy-rpc pause [30m\|2h\|off]` | Temporarily hide Discord Rich Presence |
-| `agy-rpc private [on\|off\|name-only]` | Control repo visibility on Discord |
-| `agy-rpc statcards [badge\|card\|calendar\|session-card]` | Render shareable SVGs |
-| `agy-rpc mcp [install\|uninstall]` | Stdio MCP server / Antigravity registration |
-| `agy-rpc start\|stop\|restart\|logs` | Daemon controls |
-| `agy-rpc uninstall` | Remove hooks, MCP config, autostart, and stop daemon |
+| `vibe-rpc` | Launch the 7-tab Bubbletea TUI dashboard |
+| `vibe-rpc setup` | Wire hooks, seed config, scan transcripts, start daemon |
+| `vibe-rpc settings` | Open the zero-JS Settings editor (`:47475/settings`) |
+| `vibe-rpc serve` | Open the zero-JS Web Dashboard (`:47475/`) |
+| `vibe-rpc wrapped` | Open your Coding Wrapped story (`:47475/wrapped`) |
+| `vibe-rpc status [--dump]` | Show daemon status & Discord preview |
+| `vibe-rpc today` / `week` / `projects` | Terminal analytics summaries |
+| `vibe-rpc recap [range]` | Standup-ready coding recap (`today`, `yesterday`, `week`, `7d`) |
+| `vibe-rpc insights` | Habit & dual-agent insights |
+| `vibe-rpc doctor [--fix]` | Diagnose and repair hooks, daemon, Discord IPC, and caches |
+| `vibe-rpc scan [--force]` | Incremental or full transcript rescan |
+| `vibe-rpc pause [30m\|2h\|off]` | Temporarily hide Discord Rich Presence |
+| `vibe-rpc private [on\|off\|name-only]` | Control repo visibility on Discord |
+| `vibe-rpc statcards [badge\|card\|calendar\|session-card]` | Render shareable SVGs |
+| `vibe-rpc mcp [install\|uninstall]` | Stdio MCP server / Antigravity registration |
+| `vibe-rpc start\|stop\|restart\|logs` | Daemon controls |
+| `vibe-rpc uninstall` | Remove hooks, MCP config, autostart, and stop daemon |
 
 ## Key Go Libraries
 

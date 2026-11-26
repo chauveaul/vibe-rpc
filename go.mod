@@ -1,4 +1,4 @@
-module github.com/meze/agy-rpc
+module github.com/chauveaul/vibe-rpc
 
 go 1.26.0
 

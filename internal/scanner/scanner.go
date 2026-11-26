@@ -15,12 +15,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/meze/agy-rpc/internal/config"
-	"github.com/meze/agy-rpc/internal/languages"
-	"github.com/meze/agy-rpc/internal/paths"
-	"github.com/meze/agy-rpc/internal/pricing"
-	"github.com/meze/agy-rpc/internal/ships"
-	"github.com/meze/agy-rpc/internal/state"
+	"github.com/chauveaul/vibe-rpc/internal/config"
+	"github.com/chauveaul/vibe-rpc/internal/languages"
+	"github.com/chauveaul/vibe-rpc/internal/paths"
+	"github.com/chauveaul/vibe-rpc/internal/pricing"
+	"github.com/chauveaul/vibe-rpc/internal/ships"
+	"github.com/chauveaul/vibe-rpc/internal/state"
 )
 
 const (

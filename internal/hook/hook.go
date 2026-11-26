@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/meze/agy-rpc/internal/config"
-	"github.com/meze/agy-rpc/internal/gitinfo"
-	"github.com/meze/agy-rpc/internal/paths"
-	"github.com/meze/agy-rpc/internal/ships"
-	"github.com/meze/agy-rpc/internal/state"
+	"github.com/chauveaul/vibe-rpc/internal/config"
+	"github.com/chauveaul/vibe-rpc/internal/gitinfo"
+	"github.com/chauveaul/vibe-rpc/internal/paths"
+	"github.com/chauveaul/vibe-rpc/internal/ships"
+	"github.com/chauveaul/vibe-rpc/internal/state"
 )
 
 type ToolCall struct {
@@ -64,7 +64,7 @@ var (
 	}
 )
 
-// EnsureDaemonFn is wired by cmd/agy-rpc so hook.go stays decoupled from daemon spawning.
+// EnsureDaemonFn is wired by cmd/vibe-rpc so hook.go stays decoupled from daemon spawning.
 var EnsureDaemonFn func(autostart bool)
 
 func appendEvent(entry map[string]any) {
@@ -156,7 +156,7 @@ func strArg(m map[string]any, keys ...string) string {
 }
 
 func maybeAutostart() {
-	if os.Getenv("AGY_RPC_NO_AUTOSTART") == "1" || EnsureDaemonFn == nil {
+	if os.Getenv("VIBE_RPC_NO_AUTOSTART") == "1" || EnsureDaemonFn == nil {
 		return
 	}
 	cfg := config.Load()

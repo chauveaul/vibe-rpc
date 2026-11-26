@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/meze/agy-rpc/internal/paths"
+	"github.com/chauveaul/vibe-rpc/internal/paths"
 )
 
 type SourcesConfig struct {
@@ -177,8 +177,9 @@ func (c Config) Clone() Config {
 }
 
 const (
-	DefaultClientID   = "1506443909406920948"
-	DefaultGifBaseURL = "https://cdn.jsdelivr.net/gh/chauveaul/agy-rpc@main/internal/server/assets/gifs"
+	DefaultClientID   = "1575595772760559656"
+	LegacyClientID    = "1506443909406920948"
+	DefaultGifBaseURL = "https://cdn.jsdelivr.net/gh/chauveaul/vibe-rpc@main/internal/server/assets/gifs"
 )
 
 var Statuses = []string{"working", "thinking", "compacting", "shipped", "notification", "idle", "dual"}
@@ -389,6 +390,16 @@ func LoadFrom(path string, onErr func(string)) Config {
 			onErr(fmt.Sprintf("config decode failed at %s: %v — falling back to defaults", path, err))
 		}
 		return def
+	}
+	// Pre-rename (agy-rpc) shared defaults are silently upgraded on load.
+	switch cfg.ClientID {
+	case LegacyClientID:
+		cfg.ClientID = DefaultClientID
+	}
+	switch strings.TrimRight(cfg.GifBaseURL, "/") {
+	case "https://cdn.jsdelivr.net/gh/chauveaul/agy-rpc@main/internal/server/assets/gifs",
+		"https://raw.githubusercontent.com/chauveaul/agy-rpc/main/internal/server/assets/gifs":
+		cfg.GifBaseURL = DefaultGifBaseURL
 	}
 	return cfg
 }

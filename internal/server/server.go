@@ -16,18 +16,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/meze/agy-rpc/internal/config"
-	"github.com/meze/agy-rpc/internal/daemon"
-	"github.com/meze/agy-rpc/internal/doctor"
-	"github.com/meze/agy-rpc/internal/format"
-	"github.com/meze/agy-rpc/internal/paths"
-	"github.com/meze/agy-rpc/internal/presence"
-	"github.com/meze/agy-rpc/internal/pricing"
-	"github.com/meze/agy-rpc/internal/privacy"
-	"github.com/meze/agy-rpc/internal/proc"
-	"github.com/meze/agy-rpc/internal/scanner"
-	"github.com/meze/agy-rpc/internal/state"
-	"github.com/meze/agy-rpc/internal/stats"
+	"github.com/chauveaul/vibe-rpc/internal/config"
+	"github.com/chauveaul/vibe-rpc/internal/daemon"
+	"github.com/chauveaul/vibe-rpc/internal/doctor"
+	"github.com/chauveaul/vibe-rpc/internal/format"
+	"github.com/chauveaul/vibe-rpc/internal/paths"
+	"github.com/chauveaul/vibe-rpc/internal/presence"
+	"github.com/chauveaul/vibe-rpc/internal/pricing"
+	"github.com/chauveaul/vibe-rpc/internal/privacy"
+	"github.com/chauveaul/vibe-rpc/internal/proc"
+	"github.com/chauveaul/vibe-rpc/internal/scanner"
+	"github.com/chauveaul/vibe-rpc/internal/state"
+	"github.com/chauveaul/vibe-rpc/internal/stats"
 )
 
 const DefaultPort = 47475
@@ -86,7 +86,7 @@ var (
 )
 
 func Port() int {
-	if raw := os.Getenv("AGY_RPC_PORT"); raw != "" {
+	if raw := os.Getenv("VIBE_RPC_PORT"); raw != "" {
 		if p, err := strconv.Atoi(raw); err == nil && p > 0 && p < 65536 {
 			return p
 		}
@@ -793,7 +793,7 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 	pid := daemon.AlivePID()
 	logTail := readLogTail(8192)
 	ipcState, _ := doctor.IPCStateFromLog(logTail)
-	dDot, dTitle, dSub := "down", "Daemon stopped", "Click Start or run `agy-rpc start`"
+	dDot, dTitle, dSub := "down", "Daemon stopped", "Click Start or run `vibe-rpc start`"
 	if pid > 0 {
 		if ipcState == "connected" {
 			dDot = "up"
@@ -1331,7 +1331,7 @@ func handleAPISessionCard(w http.ResponseWriter, _ *http.Request) {
 func handleAPIExportCSV(w http.ResponseWriter, _ *http.Request) {
 	_, agg, _ := loadLive()
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
-	w.Header().Set("Content-Disposition", `attachment; filename="agy-rpc-stats.csv"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="vibe-rpc-stats.csv"`)
 	_, _ = w.Write([]byte(stats.AggregateToCSV(agg)))
 }
 

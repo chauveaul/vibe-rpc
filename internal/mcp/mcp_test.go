@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/meze/agy-rpc/internal/scanner"
+	"github.com/chauveaul/vibe-rpc/internal/scanner"
 )
 
 func TestMCPProtocolHandlers(t *testing.T) {

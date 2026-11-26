@@ -11,17 +11,24 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/meze/agy-rpc/internal/config"
-	"github.com/meze/agy-rpc/internal/hook"
-	"github.com/meze/agy-rpc/internal/paths"
+	"github.com/chauveaul/vibe-rpc/internal/config"
+	"github.com/chauveaul/vibe-rpc/internal/hook"
+	"github.com/chauveaul/vibe-rpc/internal/paths"
 )
 
 const (
-	AgyHookGroupKey   = "agy-rpc"
-	LaunchAgentLabel  = "com.agy-rpc.daemon"
-	SystemdUnitName   = "agy-rpc.service"
+	AgyHookGroupKey   = "vibe-rpc"
+	LaunchAgentLabel  = "com.vibe-rpc.daemon"
+	SystemdUnitName   = "vibe-rpc.service"
 	WindowsRunRegPath = `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
-	WindowsRunValName = "AgyRPC"
+	WindowsRunValName = "VibeRPC"
+
+	// Legacy (pre-rename agy-rpc) identifiers, cleaned up on install/uninstall
+	// so upgrading never leaves duplicate hooks or a second autostarted daemon.
+	LegacyHookKey           = "agy-rpc"
+	LegacyLaunchAgentLabel  = "com.agy-rpc.daemon"
+	LegacySystemdUnitName   = "agy-rpc.service"
+	LegacyWindowsRunValName = "AgyRPC"
 )
 
 type AgyHookHandler struct {
@@ -49,7 +56,7 @@ type ClaudeHookHandler struct {
 	Type    string `json:"type"`
 	Command string `json:"command"`
 	Async   bool   `json:"async,omitempty"`
-	AgyRPC  bool   `json:"_agyRpc"`
+	VibeRPC  bool   `json:"_vibeRpc"`
 }
 
 type ClaudeHookGroup struct {
@@ -79,7 +86,7 @@ var claudeEvents = []struct {
 func ResolveBinary() string {
 	exe, err := os.Executable()
 	if err != nil {
-		return "agy-rpc"
+		return "vibe-rpc"
 	}
 	if real, err := filepath.EvalSymlinks(exe); err == nil {
 		return real
@@ -131,6 +138,7 @@ func InstallAntigravityHooks(hooksPath, binPath string) (bool, error) {
 		return false, err
 	}
 
+	delete(root, LegacyHookKey)
 	root[AgyHookGroupKey] = BuildAgyHookGroup(binPath)
 	out, err := json.MarshalIndent(root, "", "  ")
 	if err != nil {
@@ -158,10 +166,13 @@ func UninstallAntigravityHooks(hooksPath string) (bool, error) {
 	if err := json.Unmarshal(b, &root); err != nil {
 		return false, err
 	}
-	if _, ok := root[AgyHookGroupKey]; !ok {
+	_, hasNew := root[AgyHookGroupKey]
+	_, hasLegacy := root[LegacyHookKey]
+	if !hasNew && !hasLegacy {
 		return false, nil
 	}
 	delete(root, AgyHookGroupKey)
+	delete(root, LegacyHookKey)
 	out, err := json.MarshalIndent(root, "", "  ")
 	if err != nil {
 		return false, err
@@ -183,10 +194,12 @@ func isAgyClaudeGroup(raw any) bool {
 		if !ok {
 			continue
 		}
-		if flag, _ := hm["_agyRpc"].(bool); flag {
-			return true
+		for _, key := range []string{"_vibeRpc", "_agyRpc"} {
+			if flag, _ := hm[key].(bool); flag {
+				return true
+			}
 		}
-		if cmd, _ := hm["command"].(string); strings.Contains(cmd, "agy-rpc") {
+		if cmd, _ := hm["command"].(string); strings.Contains(cmd, "vibe-rpc") || strings.Contains(cmd, "agy-rpc") {
 			return true
 		}
 	}
@@ -231,7 +244,7 @@ func InstallClaudeHooks(settingsPath, binPath string) (bool, error) {
 				Type:    "command",
 				Command: fmt.Sprintf("%s hook %s --source claude", shellQuote(binPath), ev.Name),
 				Async:   ev.Async,
-				AgyRPC:  true,
+				VibeRPC:  true,
 			}},
 		}
 		kept = append(kept, entry)
@@ -321,6 +334,7 @@ func InstallAutostart(binPath string) (string, error) {
 	if binPath == "" {
 		binPath = ResolveBinary()
 	}
+	removeLegacyAutostart()
 	switch runtime.GOOS {
 	case "darwin":
 		plistPath := filepath.Join(paths.HomeDir(), "Library", "LaunchAgents", LaunchAgentLabel+".plist")
@@ -388,7 +402,28 @@ WantedBy=default.target
 	}
 }
 
+// removeLegacyAutostart unloads and deletes any pre-rename agy-rpc autostart entry.
+func removeLegacyAutostart() {
+	switch runtime.GOOS {
+	case "darwin":
+		plistPath := filepath.Join(paths.HomeDir(), "Library", "LaunchAgents", LegacyLaunchAgentLabel+".plist")
+		if _, err := os.Stat(plistPath); err == nil {
+			_ = exec.Command("launchctl", "unload", plistPath).Run()
+			_ = os.Remove(plistPath)
+		}
+	case "linux":
+		unitPath := filepath.Join(paths.HomeDir(), ".config", "systemd", "user", LegacySystemdUnitName)
+		if _, err := os.Stat(unitPath); err == nil {
+			_ = exec.Command("systemctl", "--user", "disable", "--now", LegacySystemdUnitName).Run()
+			_ = os.Remove(unitPath)
+		}
+	case "windows":
+		_ = exec.Command("reg", "delete", WindowsRunRegPath, "/v", LegacyWindowsRunValName, "/f").Run()
+	}
+}
+
 func UninstallAutostart() error {
+	removeLegacyAutostart()
 	switch runtime.GOOS {
 	case "darwin":
 		plistPath := filepath.Join(paths.HomeDir(), "Library", "LaunchAgents", LaunchAgentLabel+".plist")
@@ -410,22 +445,22 @@ func SelfTestHooks() error {
 	var agyOut bytes.Buffer
 	agyIn := bytes.NewBufferString(`{"conversationId":"selftest","hookEventName":"PreToolUse","toolCall":{"name":"read_file","args":{"Path":"README.md"}}}`)
 	// Use isolated temp state dir during self-test
-	origState := os.Getenv("AGY_RPC_STATE_DIR")
-	tmpDir, err := os.MkdirTemp("", "agy-rpc-selftest-*")
+	origState := os.Getenv("VIBE_RPC_STATE_DIR")
+	tmpDir, err := os.MkdirTemp("", "vibe-rpc-selftest-*")
 	if err != nil {
 		return err
 	}
 	defer func() {
 		_ = os.RemoveAll(tmpDir)
 		if origState == "" {
-			_ = os.Unsetenv("AGY_RPC_STATE_DIR")
+			_ = os.Unsetenv("VIBE_RPC_STATE_DIR")
 		} else {
-			_ = os.Setenv("AGY_RPC_STATE_DIR", origState)
+			_ = os.Setenv("VIBE_RPC_STATE_DIR", origState)
 		}
 	}()
-	_ = os.Setenv("AGY_RPC_STATE_DIR", tmpDir)
-	_ = os.Setenv("AGY_RPC_NO_AUTOSTART", "1")
-	defer os.Unsetenv("AGY_RPC_NO_AUTOSTART")
+	_ = os.Setenv("VIBE_RPC_STATE_DIR", tmpDir)
+	_ = os.Setenv("VIBE_RPC_NO_AUTOSTART", "1")
+	defer os.Unsetenv("VIBE_RPC_NO_AUTOSTART")
 
 	hook.RunCLI("PreToolUse", "antigravity", agyIn, &agyOut)
 	if !strings.Contains(agyOut.String(), `"decision":"allow"`) {

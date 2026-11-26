@@ -1,3 +1,4 @@
+/vibe-rpc
 /agy-rpc
 /antigravity-rpc
 *.exe
@@ -6,3 +7,5 @@ config.json
 .DS_Store
 *.png
 *.svg
+!assets/vibe-rpc-icon.png
+!assets/vibe-rpc-icon.svg

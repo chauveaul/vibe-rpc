@@ -13,24 +13,24 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/meze/agy-rpc/internal/config"
-	"github.com/meze/agy-rpc/internal/daemon"
-	"github.com/meze/agy-rpc/internal/doctor"
-	"github.com/meze/agy-rpc/internal/format"
-	"github.com/meze/agy-rpc/internal/hook"
-	"github.com/meze/agy-rpc/internal/install"
-	"github.com/meze/agy-rpc/internal/mcp"
-	"github.com/meze/agy-rpc/internal/paths"
-	"github.com/meze/agy-rpc/internal/pause"
-	"github.com/meze/agy-rpc/internal/presence"
-	"github.com/meze/agy-rpc/internal/pricing"
-	"github.com/meze/agy-rpc/internal/privacy"
-	"github.com/meze/agy-rpc/internal/proc"
-	"github.com/meze/agy-rpc/internal/scanner"
-	"github.com/meze/agy-rpc/internal/server"
-	"github.com/meze/agy-rpc/internal/state"
-	"github.com/meze/agy-rpc/internal/stats"
-	"github.com/meze/agy-rpc/internal/tui"
+	"github.com/chauveaul/vibe-rpc/internal/config"
+	"github.com/chauveaul/vibe-rpc/internal/daemon"
+	"github.com/chauveaul/vibe-rpc/internal/doctor"
+	"github.com/chauveaul/vibe-rpc/internal/format"
+	"github.com/chauveaul/vibe-rpc/internal/hook"
+	"github.com/chauveaul/vibe-rpc/internal/install"
+	"github.com/chauveaul/vibe-rpc/internal/mcp"
+	"github.com/chauveaul/vibe-rpc/internal/paths"
+	"github.com/chauveaul/vibe-rpc/internal/pause"
+	"github.com/chauveaul/vibe-rpc/internal/presence"
+	"github.com/chauveaul/vibe-rpc/internal/pricing"
+	"github.com/chauveaul/vibe-rpc/internal/privacy"
+	"github.com/chauveaul/vibe-rpc/internal/proc"
+	"github.com/chauveaul/vibe-rpc/internal/scanner"
+	"github.com/chauveaul/vibe-rpc/internal/server"
+	"github.com/chauveaul/vibe-rpc/internal/state"
+	"github.com/chauveaul/vibe-rpc/internal/stats"
+	"github.com/chauveaul/vibe-rpc/internal/tui"
 )
 
 func openBrowser(u string) {
@@ -101,7 +101,7 @@ func main() {
 	hook.EnsureDaemonFn = daemon.EnsureRunning
 
 	root := &cobra.Command{
-		Use:     "agy-rpc",
+		Use:     "vibe-rpc",
 		Short:   "Discord Rich Presence & coding analytics for Antigravity + Claude Code (100% Go)",
 		Version: paths.Version,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -116,7 +116,7 @@ func main() {
 		Aliases: []string{"install"},
 		Short:   "Wire Antigravity & Claude Code hooks, seed config, scan history, and start the daemon",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println("Setting up agy-rpc (pure Go)...")
+			fmt.Println("Setting up vibe-rpc (pure Go)...")
 			if created, err := install.SeedConfig(""); err != nil {
 				return err
 			} else if created {
@@ -166,7 +166,7 @@ func main() {
 				return err
 			}
 			fmt.Printf("  ✓ started daemon (pid %d)\n", pid)
-			fmt.Printf("\nOpen settings: agy-rpc settings\nOpen dashboard: agy-rpc serve\n")
+			fmt.Printf("\nOpen settings: vibe-rpc settings\nOpen dashboard: vibe-rpc serve\n")
 			return nil
 		},
 	}
@@ -207,7 +207,7 @@ func main() {
 			}
 			addr := fmt.Sprintf("127.0.0.1:%d", p)
 			u := fmt.Sprintf("http://%s%s", addr, route)
-			fmt.Printf("Serving agy-rpc at %s (Ctrl+C to stop)\n", u)
+			fmt.Printf("Serving vibe-rpc at %s (Ctrl+C to stop)\n", u)
 			if !noOpen {
 				openBrowser(u)
 			}
@@ -239,14 +239,14 @@ func main() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			daemon.ClearStopped()
 			if pid := daemon.AlivePID(); pid > 0 {
-				fmt.Printf("agy-rpc daemon already running (pid %d)\n", pid)
+				fmt.Printf("vibe-rpc daemon already running (pid %d)\n", pid)
 				return nil
 			}
 			pid, err := daemon.SpawnDetached()
 			if err != nil {
 				return err
 			}
-			fmt.Printf("agy-rpc daemon started (pid %d)\n", pid)
+			fmt.Printf("vibe-rpc daemon started (pid %d)\n", pid)
 			return nil
 		},
 	}
@@ -256,7 +256,7 @@ func main() {
 		Run: func(cmd *cobra.Command, args []string) {
 			daemon.MarkStopped()
 			daemon.StopAndWait()
-			fmt.Println("agy-rpc daemon stopped")
+			fmt.Println("vibe-rpc daemon stopped")
 		},
 	}
 	restartCmd := &cobra.Command{
@@ -269,7 +269,7 @@ func main() {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("agy-rpc daemon restarted (pid %d)\n", pid)
+			fmt.Printf("vibe-rpc daemon restarted (pid %d)\n", pid)
 			return nil
 		},
 	}
@@ -388,7 +388,7 @@ func main() {
 		Run: func(cmd *cobra.Command, args []string) {
 			agg := loadAggOrScan()
 			if agg == nil || len(agg.Projects) == 0 {
-				fmt.Println("No projects recorded yet. Run `agy-rpc scan`.")
+				fmt.Println("No projects recorded yet. Run `vibe-rpc scan`.")
 				return
 			}
 			if len(args) > 0 {
@@ -543,7 +543,7 @@ func main() {
 					if err := mcp.InstallConfig("", ""); err != nil {
 						return err
 					}
-					fmt.Printf("Registered agy-rpc MCP server in %s\n", paths.AgyMcpConfigPath())
+					fmt.Printf("Registered vibe-rpc MCP server in %s\n", paths.AgyMcpConfigPath())
 					return nil
 				case "uninstall":
 					ok, err := mcp.UninstallConfig("")
@@ -551,9 +551,9 @@ func main() {
 						return err
 					}
 					if ok {
-						fmt.Printf("Removed agy-rpc MCP server from %s\n", paths.AgyMcpConfigPath())
+						fmt.Printf("Removed vibe-rpc MCP server from %s\n", paths.AgyMcpConfigPath())
 					} else {
-						fmt.Println("agy-rpc MCP server was not registered.")
+						fmt.Println("vibe-rpc MCP server was not registered.")
 					}
 					return nil
 				}
@@ -790,7 +790,7 @@ func main() {
 			for _, p := range written {
 				fmt.Printf("  ✓ %s\n", p)
 			}
-			fmt.Printf("\nUpload these to Discord Developer Portal -> Rich Presence -> Art Assets (keep names like agy-working), or host them over HTTPS and set 'Public GIF Base URL' in `agy-rpc settings`.\n")
+			fmt.Printf("\nUpload these to Discord Developer Portal -> Rich Presence -> Art Assets (keep names like agy-working), or host them over HTTPS and set 'Public GIF Base URL' in `vibe-rpc settings`.\n")
 			return nil
 		},
 	}

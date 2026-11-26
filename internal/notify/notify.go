@@ -11,7 +11,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/meze/agy-rpc/internal/config"
+	"github.com/chauveaul/vibe-rpc/internal/config"
 )
 
 func SanitizeLabel(s string) string {

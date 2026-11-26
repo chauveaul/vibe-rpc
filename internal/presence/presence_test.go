@@ -3,8 +3,8 @@ package presence
 import (
 	"testing"
 
-	"github.com/meze/agy-rpc/internal/config"
-	"github.com/meze/agy-rpc/internal/state"
+	"github.com/chauveaul/vibe-rpc/internal/config"
+	"github.com/chauveaul/vibe-rpc/internal/state"
 )
 
 func TestResolveAppName(t *testing.T) {
@@ -113,7 +113,7 @@ func TestDualWieldingDetection(t *testing.T) {
 	cfg := config.Default()
 	now := int64(1_700_000_000_000)
 	sessions := []state.SessionState{
-		{Source: "antigravity", Status: "working", Cwd: "/tmp/agy-rpc", Model: "gemini-4-neon-high", CurrentFile: "server.go", LastActivity: now - 2_000},
+		{Source: "antigravity", Status: "working", Cwd: "/tmp/vibe-rpc", Model: "gemini-4-neon-high", CurrentFile: "server.go", LastActivity: now - 2_000},
 		{Source: "claude", Status: "working", Cwd: "/tmp/web-app", Model: "claude-opus-4-6", CurrentFile: "app.go", LastActivity: now - 3_000},
 	}
 	agySnap, ccSnap := PickDualSnapshots(sessions, nil, cfg, now)

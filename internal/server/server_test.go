@@ -8,14 +8,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/meze/agy-rpc/internal/config"
+	"github.com/chauveaul/vibe-rpc/internal/config"
 )
 
 func TestZeroJSHTMLPagesAndSettingsPost(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("AGY_RPC_CONFIG", filepath.Join(tmp, "config.json"))
-	t.Setenv("AGY_RPC_STATE_DIR", filepath.Join(tmp, "state"))
-	t.Setenv("AGY_RPC_DATA_DIR", filepath.Join(tmp, "data"))
+	t.Setenv("VIBE_RPC_CONFIG", filepath.Join(tmp, "config.json"))
+	t.Setenv("VIBE_RPC_STATE_DIR", filepath.Join(tmp, "state"))
+	t.Setenv("VIBE_RPC_DATA_DIR", filepath.Join(tmp, "data"))
 
 	h := NewHandler()
 
@@ -52,7 +52,7 @@ func TestZeroJSHTMLPagesAndSettingsPost(t *testing.T) {
 		"status_details":    {"Building {project}"},
 		"status_state":      {"{currentToolPretty} · {modelPretty}"},
 		"appName":           {"Antigravity Pro"},
-		"clientId":          {"1506443909406920948"},
+		"clientId":          {"1575595772760559656"},
 		"activityType":      {"0"},
 		"showElapsed":       {"on"},
 		"githubButton":      {"on"},
@@ -93,7 +93,7 @@ func TestZeroJSHTMLPagesAndSettingsPost(t *testing.T) {
 		"status_image":      {"/assets/gifs/agy-working.gif"},
 		"gif_path":          {"/assets/gifs/agy-shipped.gif"},
 		"appName":           {"Antigravity Pro"},
-		"clientId":          {"1506443909406920948"},
+		"clientId":          {"1575595772760559656"},
 		"activityType":      {"0"},
 		"showElapsed":       {"on"},
 		"githubButton":      {"on"},
@@ -127,7 +127,7 @@ func TestZeroJSHTMLPagesAndSettingsPost(t *testing.T) {
 		"status_state":      {"{currentToolPretty} · {modelPretty}"},
 		"gif_pick":          {"claude:/assets/gifs/claude-shipped.gif"},
 		"appName":           {"Antigravity Pro"},
-		"clientId":          {"1506443909406920948"},
+		"clientId":          {"1575595772760559656"},
 		"activityType":      {"0"},
 		"showElapsed":       {"on"},
 		"githubButton":      {"on"},

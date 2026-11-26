@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/meze/agy-rpc/internal/format"
-	"github.com/meze/agy-rpc/internal/pricing"
-	"github.com/meze/agy-rpc/internal/scanner"
-	"github.com/meze/agy-rpc/internal/state"
+	"github.com/chauveaul/vibe-rpc/internal/format"
+	"github.com/chauveaul/vibe-rpc/internal/pricing"
+	"github.com/chauveaul/vibe-rpc/internal/scanner"
+	"github.com/chauveaul/vibe-rpc/internal/state"
 )
 
 type WeekRow struct {
@@ -407,7 +407,7 @@ func PosterCardSVG(agg *scanner.Aggregate) string {
   </defs>
   <rect width="540" height="284" rx="22" fill="url(#cardBg)" stroke="#38496d" stroke-width="1.5"/>
   <rect x="28" y="26" width="184" height="26" rx="13" fill="url(#pill)"/>
-  <text x="120" y="43" font-family="JetBrains Mono,monospace" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">AGY-RPC · ANTIGRAVITY</text>
+  <text x="120" y="43" font-family="JetBrains Mono,monospace" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">VIBE-RPC · ANTIGRAVITY</text>
   <text x="28" y="112" font-family="Space Grotesk,sans-serif" font-size="54" font-weight="700" fill="#ffffff">%s</text>
   <text x="28" y="136" font-family="JetBrains Mono,monospace" font-size="12" fill="#8ab4f8">LIFETIME ACTIVE CODING · %d SESSIONS · %d-DAY STREAK</text>
   <line x1="28" y1="158" x2="512" y2="158" stroke="#ffffff" stroke-opacity="0.1" stroke-width="1"/>
@@ -419,7 +419,7 @@ func PosterCardSVG(agg *scanner.Aggregate) string {
     <text x="355" y="186" font-size="11" fill="#8a97b0">LINES ADDED</text>
     <text x="355" y="212" font-size="22" font-weight="700" fill="#34a853">+%s</text>
   </g>
-  <text x="28" y="256" font-family="JetBrains Mono,monospace" font-size="11" fill="#64748b">Antigravity + Claude Code · agy-rpc v2.0</text>
+  <text x="28" y="256" font-family="JetBrains Mono,monospace" font-size="11" fill="#64748b">Antigravity + Claude Code · vibe-rpc v2.0</text>
 </svg>`,
 		html.EscapeString(format.FmtHours(agg.ActiveMs)),
 		agg.Sessions,
@@ -489,7 +489,7 @@ func SessionCardSVG(st state.SessionState) string {
   <text x="24" y="40" font-family="JetBrains Mono,monospace" font-size="11" font-weight="700" fill="#8ab4f8">%s · %s</text>
   <text x="24" y="78" font-family="Space Grotesk,sans-serif" font-size="28" font-weight="700" fill="#ffffff">%s</text>
   <text x="24" y="106" font-family="JetBrains Mono,monospace" font-size="13" fill="#c7d2e5">%s · %d prompts · %d tools · %s tokens</text>
-  <text x="24" y="144" font-family="JetBrains Mono,monospace" font-size="11" fill="#64748b">agy-rpc live session snapshot</text>
+  <text x="24" y="144" font-family="JetBrains Mono,monospace" font-size="11" fill="#64748b">vibe-rpc live session snapshot</text>
 </svg>`,
 		html.EscapeString(strings.ToUpper(src)),
 		html.EscapeString(strings.ToUpper(st.Status)),

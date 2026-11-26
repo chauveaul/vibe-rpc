@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/meze/agy-rpc/internal/config"
-	"github.com/meze/agy-rpc/internal/state"
+	"github.com/chauveaul/vibe-rpc/internal/config"
+	"github.com/chauveaul/vibe-rpc/internal/state"
 )
 
 type RotationCursor struct {
@@ -433,7 +433,11 @@ func ResolveDiscordImageKey(cfg config.Config, source, status, model string) str
 		file := strings.TrimPrefix(raw, "/assets/gifs/")
 		if base := strings.TrimRight(strings.TrimSpace(cfg.GifBaseURL), "/"); base != "" {
 			// Auto-upgrade raw.githubusercontent.com for our repo to jsDelivr (Discord proxy requires CORS/CORP headers).
-			if base == "https://raw.githubusercontent.com/chauveaul/agy-rpc/main/internal/server/assets/gifs" {
+			// Also migrates the pre-rename agy-rpc repo URLs to the vibe-rpc repo.
+			switch base {
+			case "https://raw.githubusercontent.com/chauveaul/vibe-rpc/main/internal/server/assets/gifs",
+				"https://raw.githubusercontent.com/chauveaul/agy-rpc/main/internal/server/assets/gifs",
+				"https://cdn.jsdelivr.net/gh/chauveaul/agy-rpc@main/internal/server/assets/gifs":
 				base = config.DefaultGifBaseURL
 			}
 			return base + "/" + file

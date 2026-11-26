@@ -3,6 +3,7 @@ package install
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -14,20 +15,20 @@ func TestInstallAndUninstallIdempotency(t *testing.T) {
 	// Seed pre-existing user hook to make sure we preserve it
 	_ = os.WriteFile(ccSettings, []byte(`{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"echo custom"}]}]}}`), 0o644)
 
-	changed, err := InstallAntigravityHooks(agyHooks, "/usr/local/bin/agy-rpc")
+	changed, err := InstallAntigravityHooks(agyHooks, "/usr/local/bin/vibe-rpc")
 	if err != nil || !changed {
 		t.Fatalf("first Antigravity install failed: changed=%v err=%v", changed, err)
 	}
-	changed, err = InstallAntigravityHooks(agyHooks, "/usr/local/bin/agy-rpc")
+	changed, err = InstallAntigravityHooks(agyHooks, "/usr/local/bin/vibe-rpc")
 	if err != nil || changed {
 		t.Fatalf("second Antigravity install must be idempotent: changed=%v err=%v", changed, err)
 	}
 
-	changed, err = InstallClaudeHooks(ccSettings, "/usr/local/bin/agy-rpc")
+	changed, err = InstallClaudeHooks(ccSettings, "/usr/local/bin/vibe-rpc")
 	if err != nil || !changed {
 		t.Fatalf("first Claude install failed: changed=%v err=%v", changed, err)
 	}
-	changed, err = InstallClaudeHooks(ccSettings, "/usr/local/bin/agy-rpc")
+	changed, err = InstallClaudeHooks(ccSettings, "/usr/local/bin/vibe-rpc")
 	if err != nil || changed {
 		t.Fatalf("second Claude install must be idempotent: changed=%v err=%v", changed, err)
 	}
@@ -59,4 +60,27 @@ func indexStr(s, sub string) int {
 		}
 	}
 	return -1
+}
+
+func TestInstallMigratesLegacyAgyRpcHooks(t *testing.T) {
+	tmp := t.TempDir()
+	agyHooks := filepath.Join(tmp, "hooks.json")
+	ccSettings := filepath.Join(tmp, "settings.json")
+	_ = os.WriteFile(agyHooks, []byte(`{"agy-rpc":{"enabled":true},"other":{"enabled":true}}`), 0o644)
+	_ = os.WriteFile(ccSettings, []byte(`{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"/x/agy-rpc hook Stop --source claude","_agyRpc":true}]}]}}`), 0o644)
+
+	if _, err := InstallAntigravityHooks(agyHooks, "/usr/local/bin/vibe-rpc"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := InstallClaudeHooks(ccSettings, "/usr/local/bin/vibe-rpc"); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := os.ReadFile(agyHooks)
+	c, _ := os.ReadFile(ccSettings)
+	if strings.Contains(string(a), `"agy-rpc"`) || !strings.Contains(string(a), `"vibe-rpc"`) || !strings.Contains(string(a), `"other"`) {
+		t.Fatalf("legacy Antigravity hook not migrated: %s", a)
+	}
+	if strings.Contains(string(c), "agy-rpc") || strings.Count(string(c), "vibe-rpc hook Stop --source") != 1 {
+		t.Fatalf("legacy Claude hook not migrated: %s", c)
+	}
 }

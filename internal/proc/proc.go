@@ -22,7 +22,8 @@ var (
 func LooksLikeAntigravity(name, cmdline string) bool {
 	n := strings.ToLower(name)
 	c := strings.ToLower(strings.ReplaceAll(cmdline, "\\", "/"))
-	if strings.Contains(c, "agy-rpc") || strings.Contains(c, "antigravity-rpc") || strings.Contains(n, "agy-rpc") {
+	if strings.Contains(c, "vibe-rpc") || strings.Contains(c, "agy-rpc") || strings.Contains(c, "antigravity-rpc") ||
+		strings.Contains(n, "vibe-rpc") || strings.Contains(n, "agy-rpc") {
 		return false
 	}
 	if strings.Contains(c, "antigravity.app/") || strings.Contains(c, "/antigravity-cli/") || strings.Contains(c, "/antigravity-ide/") {
@@ -42,7 +43,7 @@ func LooksLikeClaudeCode(name, cmdline string) bool {
 	n := strings.ToLower(name)
 	c := strings.ToLower(strings.ReplaceAll(cmdline, "\\", "/"))
 	if strings.Contains(c, "anthropicclaude") || strings.Contains(c, "claude.app/") || strings.Contains(c, "/claude-desktop") ||
-		strings.Contains(c, "claude-rpc") || strings.Contains(c, "agy-rpc") {
+		strings.Contains(c, "claude-rpc") || strings.Contains(c, "vibe-rpc") || strings.Contains(c, "agy-rpc") {
 		return false
 	}
 	if strings.Contains(c, "@anthropic-ai/claude-code/") || strings.Contains(c, "/share/claude/versions/") {

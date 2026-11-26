@@ -9,8 +9,8 @@ func TestProcessMatchers(t *testing.T) {
 	if !LooksLikeAntigravity("Antigravity", "/Applications/Antigravity.app/Contents/MacOS/Antigravity") {
 		t.Fatal("should match Antigravity.app")
 	}
-	if LooksLikeAntigravity("agy-rpc", "/Users/meze/agy-rpc daemon") {
-		t.Fatal("must not match agy-rpc itself")
+	if LooksLikeAntigravity("vibe-rpc", "/Users/meze/vibe-rpc daemon") {
+		t.Fatal("must not match vibe-rpc itself")
 	}
 	if !LooksLikeClaudeCode("claude", "/opt/homebrew/bin/claude --resume") {
 		t.Fatal("should match claude CLI")

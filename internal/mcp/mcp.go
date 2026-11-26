@@ -10,15 +10,15 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/meze/agy-rpc/internal/format"
-	"github.com/meze/agy-rpc/internal/paths"
-	"github.com/meze/agy-rpc/internal/pricing"
-	"github.com/meze/agy-rpc/internal/scanner"
-	"github.com/meze/agy-rpc/internal/stats"
+	"github.com/chauveaul/vibe-rpc/internal/format"
+	"github.com/chauveaul/vibe-rpc/internal/paths"
+	"github.com/chauveaul/vibe-rpc/internal/pricing"
+	"github.com/chauveaul/vibe-rpc/internal/scanner"
+	"github.com/chauveaul/vibe-rpc/internal/stats"
 )
 
 const (
-	ServerName      = "agy-rpc"
+	ServerName      = "vibe-rpc"
 	ProtocolVersion = "2024-11-05"
 )
 
@@ -248,7 +248,7 @@ func InstallConfig(configPath, binPath string) error {
 				binPath = exe
 			}
 		} else {
-			binPath = "agy-rpc"
+			binPath = "vibe-rpc"
 		}
 	}
 	root := map[string]any{}

@@ -57,7 +57,7 @@ func TestIPCClientHandshakeAndSetActivity(t *testing.T) {
 		serverErr <- nil
 	}()
 
-	c := NewClient("1506443909406920948", nil)
+	c := NewClient("1575595772760559656", nil)
 	c.DialFn = func() (net.Conn, error) { return clientConn, nil }
 	defer c.Close()
 
@@ -77,9 +77,9 @@ func TestIPCClientHandshakeAndSetActivity(t *testing.T) {
 	err := c.SetActivity(Activity{
 		Name:          "Antigravity",
 		Type:          0,
-		Details:       "Working in agy-rpc",
+		Details:       "Working in vibe-rpc",
 		State:         "Edit · main.go",
-		LargeImageKey: "https://cdn.jsdelivr.net/gh/chauveaul/agy-rpc@main/internal/server/assets/gifs/agy-working.gif",
+		LargeImageKey: "https://cdn.jsdelivr.net/gh/chauveaul/vibe-rpc@main/internal/server/assets/gifs/agy-working.gif",
 	})
 	if err != nil {
 		t.Fatalf("SetActivity failed: %v", err)

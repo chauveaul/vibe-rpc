@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/meze/agy-rpc/internal/paths"
+	"github.com/chauveaul/vibe-rpc/internal/paths"
 )
 
 const DefaultDuration = time.Hour

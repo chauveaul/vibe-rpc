@@ -38,7 +38,7 @@ func TestZeroJSHTMLPagesAndSettingsPost(t *testing.T) {
 	}
 
 	// Verify API SVG / JSON / CSV / GIF endpoints
-	for _, route := range []string{"/api/state", "/api/aggregate", "/api/insights", "/api/badge.svg", "/api/card.svg", "/api/heatmap.svg", "/api/export.csv", "/assets/gifs/agy-working.gif", "/assets/gifs/agy-dual.gif", "/assets/gifs/claude-working.gif"} {
+	for _, route := range []string{"/api/state", "/api/aggregate", "/api/insights", "/api/badge.svg", "/api/card.svg", "/api/card.png", "/api/card.png?scale=1&download=1", "/api/heatmap.svg", "/api/export.csv", "/assets/gifs/agy-working.gif", "/assets/gifs/agy-dual.gif", "/assets/gifs/claude-working.gif"} {
 		req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:47475"+route, nil)
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, req)

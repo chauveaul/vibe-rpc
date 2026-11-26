@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chauveaul/vibe-rpc/internal/card"
 	"github.com/chauveaul/vibe-rpc/internal/config"
 	"github.com/chauveaul/vibe-rpc/internal/daemon"
 	"github.com/chauveaul/vibe-rpc/internal/doctor"
@@ -238,6 +239,7 @@ func NewHandler() http.Handler {
 	mux.HandleFunc("GET /api/insights", guard(handleAPIInsights))
 	mux.HandleFunc("GET /api/badge.svg", guard(handleAPIBadge))
 	mux.HandleFunc("GET /api/card.svg", guard(handleAPICard))
+	mux.HandleFunc("GET /api/card.png", guard(handleAPICardPNG))
 	mux.HandleFunc("GET /api/heatmap.svg", guard(handleAPIHeatmap))
 	mux.HandleFunc("GET /api/session-card.svg", guard(handleAPISessionCard))
 	mux.HandleFunc("GET /api/export.json", guard(handleAPIAggregate))
@@ -1521,6 +1523,27 @@ func handleAPICard(w http.ResponseWriter, _ *http.Request) {
 	_, agg, _ := loadLive()
 	w.Header().Set("Content-Type", "image/svg+xml; charset=utf-8")
 	_, _ = w.Write([]byte(stats.PosterCardSVG(agg)))
+}
+
+// handleAPICardPNG serves the shareable stats card as a PNG. ?scale=1|2|3
+// (default 2 → 2400×1260); ?download=1 sends it as an attachment.
+func handleAPICardPNG(w http.ResponseWriter, r *http.Request) {
+	_, agg, _ := loadLive()
+	scale := 2.0
+	if v, err := strconv.ParseFloat(r.URL.Query().Get("scale"), 64); err == nil && v >= 1 && v <= 3 {
+		scale = v
+	}
+	b, err := card.PNG(card.FromAggregate(agg), scale)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "no-store")
+	if r.URL.Query().Get("download") == "1" {
+		w.Header().Set("Content-Disposition", `attachment; filename="vibe-rpc-wrapped.png"`)
+	}
+	_, _ = w.Write(b)
 }
 
 func handleAPIHeatmap(w http.ResponseWriter, _ *http.Request) {

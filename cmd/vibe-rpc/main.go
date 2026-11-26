@@ -13,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/chauveaul/vibe-rpc/internal/card"
 	"github.com/chauveaul/vibe-rpc/internal/config"
 	"github.com/chauveaul/vibe-rpc/internal/daemon"
 	"github.com/chauveaul/vibe-rpc/internal/doctor"
@@ -481,10 +482,12 @@ func main() {
 
 	// statcards (badge, card, calendar, session-card)
 	var cardMetric, cardOut string
+	var cardPNG bool
+	var cardScale float64
 	statcardsCmd := &cobra.Command{
 		Use:     "statcards [badge|card|calendar|session-card]",
 		Aliases: []string{"badge", "card", "calendar", "session-card"},
-		Short:   "Render shareable SVG badges, poster cards, and heatmaps",
+		Short:   "Render shareable SVG badges, poster cards (or a PNG with --png), and heatmaps",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			kind := cmd.CalledAs()
 			if kind == "statcards" {
@@ -494,6 +497,34 @@ func main() {
 				}
 			}
 			agg := loadAggOrScan()
+			if cardPNG {
+				if kind != "card" {
+					return fmt.Errorf("--png is only supported for the stats card (vibe-rpc card --png)")
+				}
+				if cardScale < 1 || cardScale > 4 {
+					return fmt.Errorf("--scale must be between 1 and 4")
+				}
+				out := cardOut
+				if out == "" {
+					out = "vibe-rpc-card.png"
+				} else if strings.EqualFold(filepath.Ext(out), ".svg") {
+					return fmt.Errorf("--png writes a PNG; use an --out path ending in .png")
+				}
+				f, err := os.Create(out)
+				if err != nil {
+					return err
+				}
+				if err := card.WritePNG(f, card.FromAggregate(agg), cardScale); err != nil {
+					f.Close()
+					return err
+				}
+				if err := f.Close(); err != nil {
+					return err
+				}
+				abs, _ := filepath.Abs(out)
+				fmt.Printf("Wrote %s (%dx%d)\n", abs, int(card.Width*cardScale), int(card.Height*cardScale))
+				return nil
+			}
 			var svg string
 			switch kind {
 			case "badge":
@@ -514,7 +545,9 @@ func main() {
 		},
 	}
 	statcardsCmd.Flags().StringVar(&cardMetric, "metric", "hours", "Badge metric: hours|tokens|streak|cost|sessions|lines")
-	statcardsCmd.Flags().StringVar(&cardOut, "out", "", "Write SVG to file path")
+	statcardsCmd.Flags().StringVar(&cardOut, "out", "", "Write to file path (PNG defaults to ./vibe-rpc-card.png)")
+	statcardsCmd.Flags().BoolVar(&cardPNG, "png", false, "Render the stats card as a 1200×630 PNG for sharing on Discord, X or LinkedIn")
+	statcardsCmd.Flags().Float64Var(&cardScale, "scale", 2, "PNG pixel density: 1 = 1200×630, 2 = 2400×1260")
 
 	// statusline
 	var slTpl string

@@ -402,24 +402,24 @@ func PosterCardSVG(agg *scanner.Aggregate) string {
 	toks := agg.InputTokens + agg.OutputTokens + agg.CacheReadTokens + agg.CacheWriteTokens
 	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="540" height="284" viewBox="0 0 540 284">
   <defs>
-    <linearGradient id="cardBg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%%" stop-color="#1a2236"/><stop offset="100%%" stop-color="#0e111a"/></linearGradient>
-    <linearGradient id="pill" x1="0" y1="0" x2="1" y2="0"><stop offset="0%%" stop-color="#4285f4"/><stop offset="100%%" stop-color="#6366f1"/></linearGradient>
+    <radialGradient id="cardBg" cx="50%%" cy="0%%" r="120%%"><stop offset="0%%" stop-color="#15171c"/><stop offset="56%%" stop-color="#0b0c0f"/><stop offset="100%%" stop-color="#060709"/></radialGradient>
+    <linearGradient id="hero" x1="0" y1="0" x2="0" y2="1"><stop offset="35%%" stop-color="#ffffff"/><stop offset="100%%" stop-color="#b4b9c4"/></linearGradient>
   </defs>
-  <rect width="540" height="284" rx="22" fill="url(#cardBg)" stroke="#38496d" stroke-width="1.5"/>
-  <rect x="28" y="26" width="184" height="26" rx="13" fill="url(#pill)"/>
-  <text x="120" y="43" font-family="JetBrains Mono,monospace" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">VIBE-RPC · ANTIGRAVITY</text>
-  <text x="28" y="112" font-family="Space Grotesk,sans-serif" font-size="54" font-weight="700" fill="#ffffff">%s</text>
-  <text x="28" y="136" font-family="JetBrains Mono,monospace" font-size="12" fill="#8ab4f8">LIFETIME ACTIVE CODING · %d SESSIONS · %d-DAY STREAK</text>
-  <line x1="28" y1="158" x2="512" y2="158" stroke="#ffffff" stroke-opacity="0.1" stroke-width="1"/>
-  <g font-family="JetBrains Mono,monospace" fill="#f3f6fc">
-    <text x="28" y="186" font-size="11" fill="#8a97b0">TOKENS</text>
-    <text x="28" y="212" font-size="22" font-weight="700">%s</text>
-    <text x="190" y="186" font-size="11" fill="#8a97b0">API EQUIV</text>
-    <text x="190" y="212" font-size="22" font-weight="700" fill="#8ab4f8">%s</text>
-    <text x="355" y="186" font-size="11" fill="#8a97b0">LINES ADDED</text>
-    <text x="355" y="212" font-size="22" font-weight="700" fill="#34a853">+%s</text>
+  <rect width="540" height="284" rx="22" fill="url(#cardBg)" stroke="#ffffff" stroke-opacity="0.14" stroke-width="1.5"/>
+  <rect x="28" y="26" width="150" height="24" rx="12" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.16"/>
+  <text x="103" y="42" font-family="JetBrains Mono,monospace" font-size="10.5" font-weight="700" letter-spacing="1.4" fill="#c7cad1" text-anchor="middle">VIBE-RPC WRAPPED</text>
+  <text x="26" y="112" font-family="Inter,system-ui,sans-serif" font-size="56" font-weight="800" letter-spacing="-2" fill="url(#hero)">%s</text>
+  <text x="28" y="136" font-family="JetBrains Mono,monospace" font-size="11" letter-spacing="1.2" fill="#8c9099">ACTIVE CODING · %d SESSIONS · %d-DAY STREAK</text>
+  <line x1="28" y1="158" x2="512" y2="158" stroke="#ffffff" stroke-opacity="0.08" stroke-width="1"/>
+  <g font-family="JetBrains Mono,monospace">
+    <text x="28" y="186" font-size="10.5" letter-spacing="1.2" fill="#5e626b">TOKENS</text>
+    <text x="28" y="212" font-family="Inter,system-ui,sans-serif" font-size="22" font-weight="700" fill="#f5f5f7">%s</text>
+    <text x="190" y="186" font-size="10.5" letter-spacing="1.2" fill="#5e626b">API EQUIV</text>
+    <text x="190" y="212" font-family="Inter,system-ui,sans-serif" font-size="22" font-weight="700" fill="#f5f5f7">%s</text>
+    <text x="355" y="186" font-size="10.5" letter-spacing="1.2" fill="#5e626b">LINES ADDED</text>
+    <text x="355" y="212" font-family="Inter,system-ui,sans-serif" font-size="22" font-weight="700" fill="#f5f5f7">+%s</text>
   </g>
-  <text x="28" y="256" font-family="JetBrains Mono,monospace" font-size="11" fill="#64748b">Antigravity + Claude Code · vibe-rpc v2.0</text>
+  <text x="28" y="256" font-family="JetBrains Mono,monospace" font-size="10.5" fill="#5e626b">github.com/chauveaul/vibe-rpc · Antigravity + Claude Code</text>
 </svg>`,
 		html.EscapeString(format.FmtHours(agg.ActiveMs)),
 		agg.Sessions,

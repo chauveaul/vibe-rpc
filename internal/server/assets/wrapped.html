@@ -8,40 +8,48 @@
 </head>
 <body>
   <div class="story">
+    <div class="scene {{.Theme}}" aria-hidden="true">
+      <div class="pool one"></div>
+      <div class="pool two"></div>
+      <div class="dots"></div>
+    </div>
+
     <nav class="bars" aria-label="Story progress">
       {{range .Bars}}
         <a class="bar {{.Class}}" href="/wrapped?slide={{.Index}}" aria-label="Slide {{.Index}}"><i></i></a>
       {{end}}
     </nav>
 
-    <div class="brandtag">VIBE-RPC WRAPPED · ANTIGRAVITY + CLAUDE CODE</div>
+    <header class="brandtag">
+      <a class="brand" href="/">
+        <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.2" r="1.4" fill="#0a0b0e" stroke="none"/><path d="M9.4 7.5 12 13.2 14.6 7.5" stroke-width="1.6" opacity="0.65"/><path d="M5.5 7.5 12 20 18.5 7.5"/></svg></span>
+        <span>vibe-rpc</span>
+      </a>
+      <span class="tag">Wrapped</span>
+    </header>
 
     {{if .HasPrev}}<a class="tap left" href="/wrapped?slide={{.PrevSlide}}" aria-label="Previous slide"></a>{{end}}
     {{if .HasNext}}<a class="tap right" href="/wrapped?slide={{.NextSlide}}" aria-label="Next slide"></a>{{end}}
 
-    <main class="slide {{.Theme}}">
-      {{if .Watermark}}<div class="wm">{{.Watermark}}</div>{{end}}
+    <main class="slide">
+      {{if .Watermark}}<div class="wm" aria-hidden="true">{{.Watermark}}</div>{{end}}
 
       {{if .IsFinale}}
-        <div class="summary anim d1">
-          <div class="card">
-            <h2>Your Coding Wrapped</h2>
-            <div class="meta">ANTIGRAVITY + CLAUDE CODE · {{.Sessions}} SESSIONS</div>
-            <div class="grid">
-              <div><div class="cellk">Active Time</div><div class="cellv">{{.Hours}}</div></div>
-              <div><div class="cellk">Tokens</div><div class="cellv">{{.Tokens}}</div></div>
-              <div><div class="cellk">API Equiv</div><div class="cellv rust">{{.Cost}}</div></div>
-              <div><div class="cellk">Best Streak</div><div class="cellv grass">{{.LongestStreak}} days</div></div>
-              <div><div class="cellk">Lines Added</div><div class="cellv">+{{.LinesAdded}}</div></div>
-              <div><div class="cellk">Ships</div><div class="cellv">{{.Ships}}</div></div>
-            </div>
-            <div class="foot">vibe-rpc v{{.Version}} · Antigravity ({{.AgyHours}}) + Claude Code ({{.ClaudeHours}})</div>
-          </div>
-          <div class="actions">
-            <a class="btn primary" href="/api/card.svg">Download Card SVG</a>
+        <div class="finale">
+          <div class="kicker anim d1">Your card, ready to share</div>
+          <figure class="share anim d2">
+            <img src="/api/card.png?scale=2" width="1200" height="630"
+                 alt="vibe-rpc Wrapped: {{.Hours}} active coding across {{.Sessions}} sessions, {{.Tokens}} tokens, {{.Cost}} API-equivalent, {{.LongestStreak}}-day best streak, +{{.LinesAdded}} lines, {{.Ships}} ships. Antigravity {{.AgyHours}}, Claude Code {{.ClaudeHours}}.">
+          </figure>
+          <div class="actions anim d3">
+            <a class="btn primary" href="/api/card.png?scale=2&amp;download=1" download="vibe-rpc-wrapped.png">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
+              Download PNG
+            </a>
+            <a class="btn" href="/api/card.svg" download="vibe-rpc-wrapped.svg">SVG</a>
             <a class="btn" href="/wrapped?slide=0">Replay</a>
-            <a class="btn" href="/">Dashboard</a>
           </div>
+          <p class="cli anim d3">Or from a terminal: <code>vibe-rpc card --png</code></p>
         </div>
       {{else}}
         {{if .Badge}}<div class="tapebadge anim d1">{{.Badge}}</div>{{end}}
@@ -62,9 +70,13 @@
       {{end}}
     </main>
 
-    <div class="hint">
-      Slide {{.SlideNum}} / {{.TotalSlides}} · Click left/right side to navigate · <a href="/">Back to dashboard</a>
-    </div>
+    <footer class="hint">
+      <span class="count">{{.SlideNum}} / {{.TotalSlides}}</span>
+      <span class="sep">·</span>
+      <span>Tap the sides to navigate</span>
+      <span class="sep">·</span>
+      <a href="/">Dashboard</a>
+    </footer>
   </div>
 </body>
 </html>

@@ -143,7 +143,13 @@ type NotchConfig struct {
 	// Enabled keeps VibeNotch running: the daemon launches it (and so it
 	// returns at login via the daemon's autostart); disabling quits it.
 	Enabled bool `json:"enabled"`
+	// FinishAlerts shows a short banner when an agent finishes a turn.
+	// Unset means on.
+	FinishAlerts *bool `json:"finishAlerts,omitempty"`
 }
+
+// WantsFinishAlerts reports whether the "finished" banner is on (default on).
+func (n NotchConfig) WantsFinishAlerts() bool { return n.FinishAlerts == nil || *n.FinishAlerts }
 
 type PrivacyConfig struct {
 	Patterns                []string `json:"patterns,omitempty"`

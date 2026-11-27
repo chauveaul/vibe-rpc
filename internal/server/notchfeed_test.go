@@ -153,6 +153,18 @@ func TestSettingsNotchToggle(t *testing.T) {
 	if len(calls) != 2 {
 		t.Fatal("save without notch_section toggled the notch")
 	}
+
+	// The "finished" banner checkbox saves both ways.
+	form.Set("notchFinishAlerts", "on")
+	postSettings(t, h, "/settings/save", form)
+	if !config.Load().Notch.WantsFinishAlerts() {
+		t.Fatal("finish banner should be on after saving it checked")
+	}
+	form.Del("notchFinishAlerts")
+	postSettings(t, h, "/settings/save", form)
+	if config.Load().Notch.WantsFinishAlerts() {
+		t.Fatal("finish banner should be off after saving it unchecked")
+	}
 }
 
 func TestListAttention(t *testing.T) {
@@ -180,5 +192,43 @@ func TestListAttention(t *testing.T) {
 	}
 	if got[1].Project != "api" || got[1].HostAppPID != 42 || got[1].Kind != "permission" || got[1].ID == "" {
 		t.Fatalf("claude alert = %+v", got[1])
+	}
+}
+
+func TestListFinished(t *testing.T) {
+	tmp := t.TempDir()
+	dir := filepath.Join(tmp, "state")
+	_ = os.MkdirAll(dir, 0o755)
+	t.Setenv("VIBE_RPC_STATE_DIR", dir)
+	t.Setenv("CLAUDE_RPC_STATE_DIR", filepath.Join(tmp, "none"))
+	now := time.Now()
+	ms := now.UnixMilli()
+	write := func(id string, st state.SessionState) {
+		st.SessionID = id
+		b, _ := json.Marshal(st)
+		_ = os.WriteFile(filepath.Join(dir, "state-"+id+".json"), b, 0o644)
+	}
+	write("cc", state.SessionState{Source: "claude", Status: "idle", Cwd: "/w/api", LastStop: ms - 3_000, LastTurnMs: 95_000, LastActivity: ms - 3_000, HostAppPID: 42})
+	write("cx", state.SessionState{Source: "codex", Status: "idle", Cwd: "/w/web", LastStop: ms - 1_000, LastTurnMs: 0, LastActivity: ms - 1_000})
+	write("quick", state.SessionState{Source: "claude", Status: "idle", LastStop: ms - 1_000, LastTurnMs: 4_000, LastActivity: ms - 1_000})
+	write("old", state.SessionState{Source: "claude", Status: "idle", LastStop: ms - 5*60_000, LastTurnMs: 60_000, LastActivity: ms - 5*60_000})
+	write("again", state.SessionState{Source: "claude", Status: "working", LastStop: ms - 2_000, LastTurnMs: 60_000, LastActivity: ms})
+
+	got := listFinished(config.Default(), now)
+	if len(got) != 2 || got[0].Source != "codex" || got[1].Source != "claude" {
+		t.Fatalf("finished = %+v", got)
+	}
+	if got[1].Project != "api" || got[1].TurnMs != 95_000 || got[1].HostAppPID != 42 || got[1].ID == "" {
+		t.Fatalf("claude finish = %+v", got[1])
+	}
+
+	off := false
+	cfg := config.Default()
+	cfg.Notch.FinishAlerts = &off
+	if cfg.Notch.WantsFinishAlerts() {
+		t.Fatal("FinishAlerts=false should turn the banner off")
+	}
+	if !config.Default().Notch.WantsFinishAlerts() {
+		t.Fatal("finish banner should default to on")
 	}
 }

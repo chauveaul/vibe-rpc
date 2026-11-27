@@ -54,6 +54,7 @@ type NotchFeed struct {
 	Usage   notchUsage     `json:"usage"`
 	// Sessions waiting on a permission prompt or a question, newest first.
 	Attention []notchAttention `json:"attention"`
+	Finished  []notchFinished  `json:"finished"`
 }
 
 type notchAttention struct {
@@ -63,6 +64,18 @@ type notchAttention struct {
 	Kind       string `json:"kind"` // permission | question
 	Text       string `json:"text"`
 	Since      int64  `json:"since"` // unix ms
+	HostApp    string `json:"hostApp,omitempty"`
+	HostAppPID int32  `json:"hostAppPid,omitempty"`
+}
+
+// notchFinished is a turn an agent just finished, for VibeNotch's short
+// "finished" banner. The ID is unique per turn, so the app shows it once.
+type notchFinished struct {
+	ID         string `json:"id"`
+	Source     string `json:"source"`
+	Project    string `json:"project"`
+	At         int64  `json:"at"`     // unix ms
+	TurnMs     int64  `json:"turnMs"` // 0 when the prompt time is unknown
 	HostApp    string `json:"hostApp,omitempty"`
 	HostAppPID int32  `json:"hostAppPid,omitempty"`
 }
@@ -191,6 +204,10 @@ func BuildNotchFeed() NotchFeed {
 	f.Enabled = cfg.Notch.Enabled
 	f.Today = notchTodayFrom(agg, cfg.Goals.DailyHours, format.BuildVars(st, cfg, agg))
 	f.Attention = listAttention(cfg, time.Now())
+	f.Finished = []notchFinished{}
+	if cfg.Notch.WantsFinishAlerts() {
+		f.Finished = listFinished(cfg, time.Now())
+	}
 	agyModel := ""
 	if st.AgySession != nil && st.AgySession.Model != "" {
 		agyModel = st.AgySession.Model
@@ -296,6 +313,51 @@ func buildUsage(agg *scanner.Aggregate, ccLim *limits.Claude, ccStatusLine strin
 // attentionMaxAge drops prompts nobody answered (e.g. the agent was closed
 // without a SessionEnd) so they don't linger forever.
 const attentionMaxAge = 30 * time.Minute
+
+const (
+	// finishedMaxAge is how long a finished turn stays in the feed; the app
+	// only shows ones it hasn't seen, so this just covers feed restarts.
+	finishedMaxAge = time.Minute
+	// minFinishedTurn skips quick back-and-forth turns you were watching anyway.
+	minFinishedTurn = 10 * time.Second
+)
+
+// listFinished lists turns that ended in the last minute and haven't been
+// followed by a new one, newest first.
+func listFinished(cfg config.Config, now time.Time) []notchFinished {
+	out := []notchFinished{}
+	for _, s := range state.ListSessions(state.ListOptions{
+		IncludeAntigravity: cfg.Sources.WantAntigravity(),
+		IncludeClaude:      cfg.Sources.WantClaude(),
+		IncludeOpenCode:    cfg.Sources.WantOpenCode(),
+		IncludeCodex:       cfg.Sources.WantCodex(),
+		IncludeClaudeRPC:   true,
+	}) {
+		if s.LastStop == 0 || s.Status != "idle" || s.AgentClosed {
+			continue
+		}
+		if now.UnixMilli()-s.LastStop > finishedMaxAge.Milliseconds() {
+			continue
+		}
+		if s.LastTurnMs > 0 && s.LastTurnMs < minFinishedTurn.Milliseconds() {
+			continue
+		}
+		f := notchFinished{
+			ID:     fmt.Sprintf("%s:%d", s.SessionID, s.LastStop),
+			Source: scanner.SourceKey(s.Source), At: s.LastStop, TurnMs: s.LastTurnMs,
+			HostApp: s.HostApp, HostAppPID: s.HostAppPID,
+		}
+		if s.Cwd != "" {
+			f.Project = filepath.Base(s.Cwd)
+		}
+		out = append(out, f)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].At > out[j].At })
+	if len(out) > 3 {
+		out = out[:3]
+	}
+	return out
+}
 
 // listAttention reads raw session state (not the Discord-facing view, which
 // turns "waiting" back into idle after a few seconds) so an alert stays up

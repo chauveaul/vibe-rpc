@@ -199,3 +199,37 @@ func TestClaudeSessionFirstSeenMidStreamModel(t *testing.T) {
 		t.Fatalf("antigravity model = %q, want gemini", st.Model)
 	}
 }
+
+// Stop on a busy session records when the turn finished and how long it ran;
+// a repeated Stop on an idle session, or a failed stop, doesn't.
+func TestStopRecordsFinishedTurn(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("VIBE_RPC_STATE_DIR", tmp)
+	t.Setenv("VIBE_RPC_DATA_DIR", filepath.Join(tmp, "data"))
+	t.Setenv("VIBE_RPC_NO_AUTOSTART", "1")
+	body := `{"session_id":"cc-stop","cwd":"/tmp/app"}`
+	ProcessEvent("UserPromptSubmit", mustPayload(t, body), 1_000_000, "claude")
+	ProcessEvent("Stop", mustPayload(t, body), 1_045_000, "claude")
+	st := state.Read("cc-stop")
+	if st.Status != "idle" || st.LastStop != 1_045_000 || st.LastTurnMs != 45_000 {
+		t.Fatalf("after Stop: status=%q lastStop=%d turn=%d", st.Status, st.LastStop, st.LastTurnMs)
+	}
+	ProcessEvent("Stop", mustPayload(t, body), 1_050_000, "claude")
+	if st := state.Read("cc-stop"); st.LastStop != 1_045_000 {
+		t.Fatalf("repeated Stop on an idle session moved lastStop to %d", st.LastStop)
+	}
+	ProcessEvent("UserPromptSubmit", mustPayload(t, body), 1_060_000, "claude")
+	ProcessEvent("StopFailure", mustPayload(t, body), 1_070_000, "claude")
+	if st := state.Read("cc-stop"); st.LastStop != 1_045_000 {
+		t.Fatalf("StopFailure counted as a finished turn: lastStop=%d", st.LastStop)
+	}
+}
+
+func mustPayload(t *testing.T, s string) Payload {
+	t.Helper()
+	var p Payload
+	if err := json.Unmarshal([]byte(s), &p); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}

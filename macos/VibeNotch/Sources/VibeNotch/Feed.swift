@@ -27,6 +27,8 @@ struct NotchFeed: Decodable, Equatable {
     var running: [Session] = []
     var usage: Usage = Usage()
     var attention: [Attention] = []
+    /// Turns an agent just finished (optional so an older vibe-rpc still decodes).
+    var finished: [Finished]?
 
     struct Attention: Decodable, Equatable, Identifiable {
         var id: String
@@ -35,6 +37,16 @@ struct NotchFeed: Decodable, Equatable {
         var kind: String  // permission | question
         var text: String
         var since: Int64  // unix ms
+        var hostApp: String?
+        var hostAppPid: Int32?
+    }
+
+    struct Finished: Decodable, Equatable, Identifiable {
+        var id: String
+        var source: String
+        var project: String
+        var at: Int64      // unix ms
+        var turnMs: Int64  // 0 when unknown
         var hostApp: String?
         var hostAppPid: Int32?
     }

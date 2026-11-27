@@ -549,6 +549,17 @@ func ProcessEvent(event string, in Payload, nowMs int64, explicitSource string) 
 
 	default: // Stop, StopFailure
 		update(func(s *state.SessionState, _ bool) {
+			// A turn that was in progress just ended: remember when and how
+			// long it ran, for the notch's "finished" banner. Repeated Stops
+			// on an idle session don't count again.
+			if event == "Stop" && busyStatus(s.Status) {
+				s.LastStop = nowMs
+				s.LastTurnMs = 0
+				if s.LastUserPrompt > 0 && s.LastUserPrompt < nowMs {
+					s.LastTurnMs = nowMs - s.LastUserPrompt
+				}
+				refreshHostApp(s)
+			}
 			s.Status = "idle"
 			s.CurrentTool = ""
 			s.CurrentFile = ""
@@ -560,6 +571,15 @@ func ProcessEvent(event string, in Payload, nowMs int64, explicitSource string) 
 			}
 		})
 	}
+}
+
+// busyStatus reports whether a session was mid-turn.
+func busyStatus(s string) bool {
+	switch s {
+	case "working", "thinking", "compacting", "notification":
+		return true
+	}
+	return false
 }
 
 // RunCLI reads JSON from stdin, processes the hook event, and ALWAYS prints the

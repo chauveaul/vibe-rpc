@@ -547,6 +547,9 @@
             {{else}}<span class="dot down"></span>Off{{end}}
           </span>
         </div>
+        <div class="checks row">
+          <label class="check"><input type="checkbox" name="notchFinishAlerts" {{if .Cfg.Notch.WantsFinishAlerts}}checked{{end}}> Show a short banner when an agent finishes a turn</label>
+        </div>
         <p class="set-note">While an agent works, a timer and status GIF appear beside the notch. Hover under the notch for your Discord card, today's stats, usage bars and quick actions. The daemon keeps it running, so it comes back at login.</p>
         {{if not .NotchInstalled}}
         <p class="set-note warn">VibeNotch.app isn't installed yet. Install it from GitHub Releases with <code class="code-chip">vibe-rpc notch install</code> (or build from source with <code class="code-chip">macos/VibeNotch/build-app.sh --install</code>).</p>

@@ -45,16 +45,22 @@ final class FirstClickHostingView<Content: View>: NSHostingView<Content> {
     }
 }
 
-/// A transient usage-limit warning shown when a 5h or weekly window crosses
-/// 90%, 95%, or 100%. Auto-dismisses after 10 seconds or when hovered.
+/// A transient banner below the notch: a usage-limit warning when a 5h or
+/// weekly window crosses 90%, 95% or 100%, or a short "finished" notice when
+/// an agent ends a turn. Auto-dismisses after `lifetime` seconds or on hover.
 struct LimitAlert: Equatable, Identifiable {
+    enum Kind: Equatable { case limit, finished }
+
     let id: String
-    let source: String   // "claude" | "antigravity"
+    let source: String   // "claude" | "antigravity" | "opencode" | "codex"
     let title: String
     let subtitle: String
-    let threshold: Int   // 90 | 95 | 100
+    let threshold: Int   // 90 | 95 | 100 (limit only)
     let pct: Int
     let isPreview: Bool
+    var kind: Kind = .limit
+    var badge: String = ""      // finished: how long the turn ran
+    var lifetime: Double = 10
 }
 
 /// Owns the panel and turns mouse position into hidden / live / expanded.
@@ -73,6 +79,8 @@ final class NotchController: ObservableObject {
         UserDefaults.standard.dictionary(forKey: "vibeNotchNotifiedLimitTiers") as? [String: Int] ?? [:]
     }()
     private var limitTimers: [String: DispatchWorkItem] = [:]
+    /// Finished-turn ids already shown (or skipped), so each shows once.
+    private var seenFinished: Set<String> = []
 
     let feed: FeedClient
     private let panel = NotchPanel()
@@ -89,7 +97,7 @@ final class NotchController: ObservableObject {
         case "expanded": return .expanded
         case "alert": return .alert(1)
         case "alert2": return .alert(2)
-        case "limit", "limit90", "limit95", "limit100": return .limitAlert(1)
+        case "limit", "limit90", "limit95", "limit100", "finished": return .limitAlert(1)
         default: return nil
         }
     }()
@@ -109,6 +117,10 @@ final class NotchController: ObservableObject {
     }
 
     func start() {
+        if CommandLine.arguments.contains("finished") && pinned != nil {
+            limitAlerts = [Self.finishedAlert(id: "preview-finished", source: "claude", project: "vibe-rpc",
+                                              turnMs: 134_000, isPreview: true)]
+        }
         if let t = previewLimitThreshold {
             limitAlerts = [LimitAlert(
                 id: "preview-\(t)",
@@ -182,6 +194,7 @@ final class NotchController: ObservableObject {
     private func refreshResting() {
         updateAlerts()
         checkUsageLimits()
+        checkFinished()
         if let pinned { setMode(pinned); return }
         if mode != .expanded { setMode(restingMode) }
     }
@@ -287,13 +300,60 @@ final class NotchController: ObservableObject {
         }
     }
 
-    private func scheduleLimitDismiss(id: String) {
+    /// Shows a short banner for each turn an agent just finished, once. Skips
+    /// stale ones (e.g. from before launch), and ones you're already looking
+    /// at: the panel is open, or the agent's terminal/editor is frontmost.
+    private func checkFinished() {
+        guard pinned == nil, let list = feed.feed?.finished, !list.isEmpty else { return }
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let front = NSWorkspace.shared.frontmostApplication
+        var added: [LimitAlert] = []
+        for f in list where !seenFinished.contains(f.id) {
+            seenFinished.insert(f.id)
+            guard nowMs - f.at < 20_000, mode != .expanded,
+                  !isFrontApp(pid: f.hostAppPid, app: f.hostApp, front: front) else { continue }
+            added.append(Self.finishedAlert(id: "finished-\(f.id)", source: f.source, project: f.project,
+                                            turnMs: f.turnMs, isPreview: false))
+        }
+        if seenFinished.count > 200 { seenFinished = Set(list.map(\.id)) }
+        guard !added.isEmpty else { return }
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+            limitAlerts.insert(contentsOf: added, at: 0)
+            if limitAlerts.count > 2 {
+                for dropped in limitAlerts.dropFirst(2) {
+                    limitTimers.removeValue(forKey: dropped.id)?.cancel()
+                }
+                limitAlerts = Array(limitAlerts.prefix(2))
+            }
+        }
+        for item in added {
+            scheduleLimitDismiss(id: item.id, after: item.lifetime)
+        }
+    }
+
+    static func finishedAlert(id: String, source: String, project: String, turnMs: Int64, isPreview: Bool) -> LimitAlert {
+        let subtitle = project.isEmpty ? "Ready for your next prompt" : "\(project) · ready for your next prompt"
+        return LimitAlert(id: id, source: source, title: "\(AgentLogo.name(for: source)) finished",
+                          subtitle: subtitle, threshold: 0, pct: 0, isPreview: isPreview,
+                          kind: .finished, badge: Self.turnLength(ms: turnMs), lifetime: 6)
+    }
+
+    /// "45s", "2m 14s", "1h 3m"; "done" when the length is unknown.
+    static func turnLength(ms: Int64) -> String {
+        let s = Int(ms / 1000)
+        if s <= 0 { return "done" }
+        if s < 60 { return "\(s)s" }
+        if s < 3600 { return "\(s / 60)m \(s % 60)s" }
+        return "\(s / 3600)h \((s % 3600) / 60)m"
+    }
+
+    private func scheduleLimitDismiss(id: String, after seconds: Double = 10) {
         limitTimers[id]?.cancel()
         let work = DispatchWorkItem { [weak self] in
             Task { @MainActor in self?.dismissLimitAlert(id: id) }
         }
         limitTimers[id] = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 10.0, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
     }
 
     func dismissLimitAlert(id: String) {
@@ -353,9 +413,13 @@ final class NotchController: ObservableObject {
     }
 
     private func isFront(_ a: NotchFeed.Attention, _ front: NSRunningApplication?) -> Bool {
+        isFrontApp(pid: a.hostAppPid, app: a.hostApp, front: front)
+    }
+
+    private func isFrontApp(pid: Int32?, app: String?, front: NSRunningApplication?) -> Bool {
         guard let front else { return false }
-        if let pid = a.hostAppPid, pid > 0, front.processIdentifier == pid { return true }
-        if let host = a.hostApp, let url = front.bundleURL, url.path == host { return true }
+        if let pid, pid > 0, front.processIdentifier == pid { return true }
+        if let app, let url = front.bundleURL, url.path == app { return true }
         return false
     }
 

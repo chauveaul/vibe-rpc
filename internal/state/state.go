@@ -48,6 +48,10 @@ type SessionState struct {
 	LastUserPrompt   int64  `json:"lastUserPrompt,omitempty"`
 	LastUserInputSig string `json:"lastUserInputSig,omitempty"`
 	LastNotification int64  `json:"lastNotification,omitempty"`
+	// When the agent last finished a turn, and how long that turn ran from
+	// the prompt; drives the notch's "finished" banner.
+	LastStop   int64 `json:"lastStop,omitempty"`
+	LastTurnMs int64 `json:"lastTurnMs,omitempty"`
 	// What the agent is waiting on, for the notch's attention alerts.
 	AttentionKind string `json:"attentionKind,omitempty"` // permission | question | idle
 	AttentionText string `json:"attentionText,omitempty"`

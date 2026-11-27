@@ -177,6 +177,10 @@ It also warns you when a plan limit reaches 90 %, 95 % and 100 %:
 
 <p align="center"><img src="./assets/screenshots/notch-limit.png" width="438" alt="VibeNotch alert: Antigravity 5-hour limit at 95 percent, with the reset time"></p>
 
+When an agent finishes a turn that ran for 10 seconds or more, a short banner says so for a few seconds, unless you're already in that agent's terminal or editor. You can turn it off in Settings:
+
+<p align="center"><img src="./assets/screenshots/notch-finished.png" width="438" alt="VibeNotch banner: Claude Code finished in vibe-rpc after 2 minutes 14 seconds"></p>
+
 ```bash
 vibe-rpc notch install   # download VibeNotch.app into ~/Applications
 vibe-rpc notch           # turn it on

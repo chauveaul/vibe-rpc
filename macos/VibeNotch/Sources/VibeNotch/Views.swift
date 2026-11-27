@@ -671,7 +671,7 @@ struct LimitAlertRow: View {
     @State private var remaining: CGFloat = 1
 
     var body: some View {
-        let accent = Palette.limitColor(alert.threshold)
+        let accent = alert.kind == .finished ? Palette.green : Palette.limitColor(alert.threshold)
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 AgentLogo(source: alert.source)
@@ -695,7 +695,13 @@ struct LimitAlertRow: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
-                Text("\(alert.pct)%")
+                HStack(spacing: 4) {
+                    if alert.kind == .finished {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 9, weight: .heavy))
+                    }
+                    Text(alert.kind == .finished ? alert.badge : "\(alert.pct)%")
+                }
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
                     .monospacedDigit()
                     .foregroundStyle(accent)
@@ -721,7 +727,7 @@ struct LimitAlertRow: View {
         .padding(.vertical, 2)
         .onAppear {
             guard !alert.isPreview else { return }
-            withAnimation(.linear(duration: 10)) { remaining = 0 }
+            withAnimation(.linear(duration: alert.lifetime)) { remaining = 0 }
         }
     }
 }

@@ -163,6 +163,10 @@ func HumanModel(id string) string {
 		return titleWord(low)
 	case "claude":
 		return "Claude"
+	case "codex":
+		return "Codex"
+	case "opencode":
+		return "OpenCode"
 	case "flash_lite", "flash-lite":
 		return "Gemini Flash Lite"
 	case "flash":

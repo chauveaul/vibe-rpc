@@ -193,6 +193,11 @@ func TestClaudeSessionFirstSeenMidStreamModel(t *testing.T) {
 	if st := state.Read("cc-mid"); st.Model != "claude" {
 		t.Fatalf("model = %q, want claude", st.Model)
 	}
+	// Codex too: it must not show up as Gemini.
+	RunCLI("UserPromptSubmit", "codex", bytes.NewBufferString(`{"session_id":"cx-mid","cwd":"/tmp/app","prompt":"hi"}`), &out)
+	if st := state.Read("cx-mid"); st.Model != "codex" {
+		t.Fatalf("codex model = %q, want codex", st.Model)
+	}
 	// An Antigravity session keeps its default.
 	RunCLI("PreToolUse", "antigravity", bytes.NewBufferString(`{"conversationId":"agy-mid","workspacePaths":["/tmp/app"],"hookEventName":"PreToolUse","toolCall":{"name":"view_file","args":{}}}`), &out)
 	if st := state.Read("agy-mid"); st.Model != "gemini" {

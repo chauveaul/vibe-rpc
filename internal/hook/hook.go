@@ -232,11 +232,11 @@ func ProcessEvent(event string, in Payload, nowMs int64, explicitSource string) 
 			}
 			if model != "" {
 				s.Model = model
-			} else if source == "claude" && s.Model == "gemini" {
+			} else if s.Model == "gemini" && source != "antigravity" {
 				// A session first seen mid-stream (resumed, or its state file
-				// was cleaned up) starts from DefaultState's Antigravity model,
-				// and Claude Code only reports its model at SessionStart.
-				s.Model = "claude"
+				// was cleaned up) starts from DefaultState's Antigravity model;
+				// most agents only report their model at SessionStart.
+				s.Model = placeholderModel(source)
 			}
 			s.Source = source
 			s.SessionID = sid
@@ -270,10 +270,8 @@ func ProcessEvent(event string, in Payload, nowMs int64, explicitSource string) 
 			}
 			if model != "" {
 				s.Model = model
-			} else if source == "claude" {
-				s.Model = "claude"
 			} else {
-				s.Model = "gemini"
+				s.Model = placeholderModel(source)
 			}
 			s.TranscriptPath = tpath
 			s.Status = "idle"
@@ -571,6 +569,16 @@ func ProcessEvent(event string, in Payload, nowMs int64, explicitSource string) 
 			}
 		})
 	}
+}
+
+// placeholderModel stands in until an agent reports its model: the agent's
+// own name ("Claude", "Codex", "OpenCode"), or Gemini for Antigravity.
+func placeholderModel(source string) string {
+	switch source {
+	case "claude", "codex", "opencode":
+		return source
+	}
+	return "gemini"
 }
 
 // busyStatus reports whether a session was mid-turn.

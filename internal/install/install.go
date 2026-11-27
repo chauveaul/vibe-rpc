@@ -56,7 +56,7 @@ type ClaudeHookHandler struct {
 	Type    string `json:"type"`
 	Command string `json:"command"`
 	Async   bool   `json:"async,omitempty"`
-	VibeRPC  bool   `json:"_vibeRpc"`
+	VibeRPC bool   `json:"_vibeRpc"`
 }
 
 type ClaudeHookGroup struct {
@@ -266,7 +266,7 @@ func InstallClaudeHooks(settingsPath, binPath string) (bool, error) {
 				Type:    "command",
 				Command: fmt.Sprintf("%s hook %s --source claude", shellQuote(binPath), ev.Name),
 				Async:   ev.Async,
-				VibeRPC:  true,
+				VibeRPC: true,
 			}},
 		}
 		kept = append(kept, entry)

@@ -52,7 +52,7 @@ func TestRenderHeatmapPNG(t *testing.T) {
 		Streak:        7,
 		LongestStreak: 14,
 		ByDay: map[string]*scanner.DayBucket{
-			now.Format("2006-01-02"):                  {ActiveMs: 3 * 3_600_000},
+			now.Format("2006-01-02"):                   {ActiveMs: 3 * 3_600_000},
 			now.AddDate(0, 0, -1).Format("2006-01-02"): {ActiveMs: 90 * 60_000},
 		},
 	}

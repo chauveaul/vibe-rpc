@@ -133,42 +133,42 @@ type PeakHour struct {
 }
 
 type TranscriptSummary struct {
-	Source           string                   `json:"source"`
-	SessionID        string                   `json:"sessionId"`
-	Project          string                   `json:"project"`
-	Cwd              string                   `json:"cwd"`
-	Model            string                   `json:"model"`
-	InputTokens      int64                    `json:"inputTokens"`
-	OutputTokens     int64                    `json:"outputTokens"`
-	CacheReadTokens  int64                    `json:"cacheReadTokens"`
-	CacheWriteTokens int64                    `json:"cacheWriteTokens"`
-	UserMessages     int                      `json:"userMessages"`
-	ToolCalls        int                      `json:"toolCalls"`
-	ToolBreakdown    map[string]int           `json:"toolBreakdown"`
-	Files            []string                 `json:"files"`
-	FirstTs          int64                    `json:"firstTs"`
-	LastTs           int64                    `json:"lastTs"`
-	ActiveMs         int64                    `json:"activeMs"`
-	ByDay            map[string]*DayBucket    `json:"byDay"`
-	ByWeek           map[string]*DayBucket    `json:"byWeek"`
-	ByHour           map[string]*DayBucket    `json:"byHour"`
-	Spans            [][2]int64               `json:"spans,omitempty"` // merged active [start,end) ms intervals
-	FileEdits        map[string]int           `json:"fileEdits"`
-	FileEditTs       map[string]int64         `json:"fileEditTs"`
-	LinesAdded       int                      `json:"linesAdded"`
-	LinesRemoved     int                      `json:"linesRemoved"`
-	BashCommands     map[string]int           `json:"bashCommands"`
-	WebDomains       map[string]int           `json:"webDomains"`
-	Subagents        map[string]int           `json:"subagents"`
-	Ships            int                      `json:"ships"`
-	ShipKinds        map[string]int           `json:"shipKinds"`
-	Cost             float64                  `json:"cost"`
-	CostByModel      map[string]float64       `json:"costByModel"`
-	ModelsUsed       map[string]int           `json:"modelsUsed"`
-	ByModel          map[string]*ModelBucket  `json:"byModel"`
-	Sig              string                   `json:"_sig,omitempty"`
-	IsSubagent       bool                     `json:"isSubagent,omitempty"`
-	Gone             bool                     `json:"_gone,omitempty"`
+	Source           string                  `json:"source"`
+	SessionID        string                  `json:"sessionId"`
+	Project          string                  `json:"project"`
+	Cwd              string                  `json:"cwd"`
+	Model            string                  `json:"model"`
+	InputTokens      int64                   `json:"inputTokens"`
+	OutputTokens     int64                   `json:"outputTokens"`
+	CacheReadTokens  int64                   `json:"cacheReadTokens"`
+	CacheWriteTokens int64                   `json:"cacheWriteTokens"`
+	UserMessages     int                     `json:"userMessages"`
+	ToolCalls        int                     `json:"toolCalls"`
+	ToolBreakdown    map[string]int          `json:"toolBreakdown"`
+	Files            []string                `json:"files"`
+	FirstTs          int64                   `json:"firstTs"`
+	LastTs           int64                   `json:"lastTs"`
+	ActiveMs         int64                   `json:"activeMs"`
+	ByDay            map[string]*DayBucket   `json:"byDay"`
+	ByWeek           map[string]*DayBucket   `json:"byWeek"`
+	ByHour           map[string]*DayBucket   `json:"byHour"`
+	Spans            [][2]int64              `json:"spans,omitempty"` // merged active [start,end) ms intervals
+	FileEdits        map[string]int          `json:"fileEdits"`
+	FileEditTs       map[string]int64        `json:"fileEditTs"`
+	LinesAdded       int                     `json:"linesAdded"`
+	LinesRemoved     int                     `json:"linesRemoved"`
+	BashCommands     map[string]int          `json:"bashCommands"`
+	WebDomains       map[string]int          `json:"webDomains"`
+	Subagents        map[string]int          `json:"subagents"`
+	Ships            int                     `json:"ships"`
+	ShipKinds        map[string]int          `json:"shipKinds"`
+	Cost             float64                 `json:"cost"`
+	CostByModel      map[string]float64      `json:"costByModel"`
+	ModelsUsed       map[string]int          `json:"modelsUsed"`
+	ByModel          map[string]*ModelBucket `json:"byModel"`
+	Sig              string                  `json:"_sig,omitempty"`
+	IsSubagent       bool                    `json:"isSubagent,omitempty"`
+	Gone             bool                    `json:"_gone,omitempty"`
 }
 
 type ScanCache struct {
@@ -177,60 +177,60 @@ type ScanCache struct {
 }
 
 type Aggregate struct {
-	Sessions         int                      `json:"sessions"`
-	SubagentRuns     int                      `json:"subagentRuns"`
-	SubagentActiveMs int64                    `json:"subagentActiveMs"`
-	InputTokens      int64                    `json:"inputTokens"`
-	OutputTokens     int64                    `json:"outputTokens"`
-	CacheReadTokens  int64                    `json:"cacheReadTokens"`
-	CacheWriteTokens int64                    `json:"cacheWriteTokens"`
-	UserMessages     int                      `json:"userMessages"`
-	ToolCalls        int                      `json:"toolCalls"`
-	ToolBreakdown    map[string]int           `json:"toolBreakdown"`
-	Projects         map[string]*ProjectStats `json:"projects"`
-	ActiveMs         int64                    `json:"activeMs"`
-	WallMs           int64                    `json:"wallMs"`
-	UniqueFiles      int                      `json:"uniqueFiles"`
-	FirstTs          int64                    `json:"firstTs,omitempty"`
-	LastTs           int64                    `json:"lastTs,omitempty"`
-	ByDay            map[string]*DayBucket    `json:"byDay"`
-	ByWeek           map[string]*DayBucket    `json:"byWeek"`
-	ByHour           map[string]*DayBucket    `json:"byHour"`
-	ByWeekday        map[string]*DayBucket    `json:"byWeekday"`
-	FileEdits        map[string]int           `json:"fileEdits"`
-	FileEditTs       map[string]int64         `json:"fileEditTs"`
-	Streak           int                      `json:"streak"`
-	LongestStreak    int                      `json:"longestStreak"`
-	DaysSinceFirst   int                      `json:"daysSinceFirst"`
-	BestDay          *BestDay                 `json:"bestDay,omitempty"`
-	PeakHour         *PeakHour                `json:"peakHour,omitempty"`
-	TopEditedFiles   []HotspotFile            `json:"topEditedFiles"`
-	LinesAdded       int                      `json:"linesAdded"`
-	LinesRemoved     int                      `json:"linesRemoved"`
-	LinesNet         int                      `json:"linesNet"`
-	Ships            int                      `json:"ships"`
-	ShipKinds        map[string]int           `json:"shipKinds"`
-	BashCommands     map[string]int           `json:"bashCommands"`
-	WebDomains       map[string]int           `json:"webDomains"`
-	Subagents        map[string]int           `json:"subagents"`
-	Languages        map[string]*LangStats    `json:"languages"`
-	MCPToolCalls     int                      `json:"mcpToolCalls"`
-	BuiltinToolCalls int                      `json:"builtinToolCalls"`
-	EstimatedCost    float64                  `json:"estimatedCost"`
-	CostByModel      map[string]float64       `json:"costByModel"`
-	ModelsUsed       map[string]int           `json:"modelsUsed"`
-	ByModel          map[string]*ModelBucket  `json:"byModel"`
-	ModelSplit       []ModelSplitEntry        `json:"modelSplit"`
-	BySource         map[string]*SourceStats  `json:"bySource"`
+	Sessions         int                              `json:"sessions"`
+	SubagentRuns     int                              `json:"subagentRuns"`
+	SubagentActiveMs int64                            `json:"subagentActiveMs"`
+	InputTokens      int64                            `json:"inputTokens"`
+	OutputTokens     int64                            `json:"outputTokens"`
+	CacheReadTokens  int64                            `json:"cacheReadTokens"`
+	CacheWriteTokens int64                            `json:"cacheWriteTokens"`
+	UserMessages     int                              `json:"userMessages"`
+	ToolCalls        int                              `json:"toolCalls"`
+	ToolBreakdown    map[string]int                   `json:"toolBreakdown"`
+	Projects         map[string]*ProjectStats         `json:"projects"`
+	ActiveMs         int64                            `json:"activeMs"`
+	WallMs           int64                            `json:"wallMs"`
+	UniqueFiles      int                              `json:"uniqueFiles"`
+	FirstTs          int64                            `json:"firstTs,omitempty"`
+	LastTs           int64                            `json:"lastTs,omitempty"`
+	ByDay            map[string]*DayBucket            `json:"byDay"`
+	ByWeek           map[string]*DayBucket            `json:"byWeek"`
+	ByHour           map[string]*DayBucket            `json:"byHour"`
+	ByWeekday        map[string]*DayBucket            `json:"byWeekday"`
+	FileEdits        map[string]int                   `json:"fileEdits"`
+	FileEditTs       map[string]int64                 `json:"fileEditTs"`
+	Streak           int                              `json:"streak"`
+	LongestStreak    int                              `json:"longestStreak"`
+	DaysSinceFirst   int                              `json:"daysSinceFirst"`
+	BestDay          *BestDay                         `json:"bestDay,omitempty"`
+	PeakHour         *PeakHour                        `json:"peakHour,omitempty"`
+	TopEditedFiles   []HotspotFile                    `json:"topEditedFiles"`
+	LinesAdded       int                              `json:"linesAdded"`
+	LinesRemoved     int                              `json:"linesRemoved"`
+	LinesNet         int                              `json:"linesNet"`
+	Ships            int                              `json:"ships"`
+	ShipKinds        map[string]int                   `json:"shipKinds"`
+	BashCommands     map[string]int                   `json:"bashCommands"`
+	WebDomains       map[string]int                   `json:"webDomains"`
+	Subagents        map[string]int                   `json:"subagents"`
+	Languages        map[string]*LangStats            `json:"languages"`
+	MCPToolCalls     int                              `json:"mcpToolCalls"`
+	BuiltinToolCalls int                              `json:"builtinToolCalls"`
+	EstimatedCost    float64                          `json:"estimatedCost"`
+	CostByModel      map[string]float64               `json:"costByModel"`
+	ModelsUsed       map[string]int                   `json:"modelsUsed"`
+	ByModel          map[string]*ModelBucket          `json:"byModel"`
+	ModelSplit       []ModelSplitEntry                `json:"modelSplit"`
+	BySource         map[string]*SourceStats          `json:"bySource"`
 	SourceDays       map[string]map[string]*SourceDay `json:"sourceDays,omitempty"` // source -> day -> stats
-	DualMs           int64                    `json:"dualMs"`                                // time both agents were active at once
-	DualByDay        map[string]int64         `json:"dualByDay,omitempty"`
-	RecentSpans      map[string][][2]int64    `json:"recentSpans,omitempty"` // source -> merged active spans from the last 24h
-	Notifications    int                      `json:"notifications"`
-	Compactions      int                      `json:"compactions"`
-	CompactionsByDay map[string]int           `json:"compactionsByDay"`
-	GeneratedAt      int64                    `json:"generatedAt"`
-	Version          int                      `json:"_v"`
+	DualMs           int64                            `json:"dualMs"`               // time both agents were active at once
+	DualByDay        map[string]int64                 `json:"dualByDay,omitempty"`
+	RecentSpans      map[string][][2]int64            `json:"recentSpans,omitempty"` // source -> merged active spans from the last 24h
+	Notifications    int                              `json:"notifications"`
+	Compactions      int                              `json:"compactions"`
+	CompactionsByDay map[string]int                   `json:"compactionsByDay"`
+	GeneratedAt      int64                            `json:"generatedAt"`
+	Version          int                              `json:"_v"`
 }
 
 func DayKey(tsMs int64) string {
@@ -1228,22 +1228,22 @@ func readEventsByDay() (map[string]int, map[string]int) {
 
 func AggregateFrom(cache *ScanCache) *Aggregate {
 	agg := &Aggregate{
-		ToolBreakdown:    map[string]int{},
-		Projects:         map[string]*ProjectStats{},
-		ByDay:            map[string]*DayBucket{},
-		ByWeek:           map[string]*DayBucket{},
-		ByHour:           map[string]*DayBucket{},
-		ByWeekday:        map[string]*DayBucket{},
-		FileEdits:        map[string]int{},
-		FileEditTs:       map[string]int64{},
-		ShipKinds:        map[string]int{},
-		BashCommands:     map[string]int{},
-		WebDomains:       map[string]int{},
-		Subagents:        map[string]int{},
-		Languages:        map[string]*LangStats{},
-		CostByModel:      map[string]float64{},
-		ModelsUsed:       map[string]int{},
-		ByModel:          map[string]*ModelBucket{},
+		ToolBreakdown: map[string]int{},
+		Projects:      map[string]*ProjectStats{},
+		ByDay:         map[string]*DayBucket{},
+		ByWeek:        map[string]*DayBucket{},
+		ByHour:        map[string]*DayBucket{},
+		ByWeekday:     map[string]*DayBucket{},
+		FileEdits:     map[string]int{},
+		FileEditTs:    map[string]int64{},
+		ShipKinds:     map[string]int{},
+		BashCommands:  map[string]int{},
+		WebDomains:    map[string]int{},
+		Subagents:     map[string]int{},
+		Languages:     map[string]*LangStats{},
+		CostByModel:   map[string]float64{},
+		ModelsUsed:    map[string]int{},
+		ByModel:       map[string]*ModelBucket{},
 		BySource: map[string]*SourceStats{
 			"antigravity": {},
 			"claude":      {},

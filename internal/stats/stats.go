@@ -218,17 +218,17 @@ func GenerateInsights(agg *scanner.Aggregate) []string {
 }
 
 type Recap struct {
-	Label        string           `json:"label"`
-	Days         []string         `json:"days"`
-	ActiveMs     int64            `json:"activeMs"`
-	Sessions     int              `json:"sessions"`
-	Prompts      int              `json:"prompts"`
-	Tokens       int64            `json:"tokens"`
-	Cost         float64          `json:"cost"`
-	LinesAdded   int              `json:"linesAdded"`
-	LinesRemoved int              `json:"linesRemoved"`
-	Ships        int              `json:"ships"`
-	Projects     []RecapProject   `json:"projects"`
+	Label        string         `json:"label"`
+	Days         []string       `json:"days"`
+	ActiveMs     int64          `json:"activeMs"`
+	Sessions     int            `json:"sessions"`
+	Prompts      int            `json:"prompts"`
+	Tokens       int64          `json:"tokens"`
+	Cost         float64        `json:"cost"`
+	LinesAdded   int            `json:"linesAdded"`
+	LinesRemoved int            `json:"linesRemoved"`
+	Ships        int            `json:"ships"`
+	Projects     []RecapProject `json:"projects"`
 }
 
 type RecapProject struct {

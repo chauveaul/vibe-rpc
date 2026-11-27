@@ -40,21 +40,21 @@ type TriggerFrame struct {
 }
 
 type SessionState struct {
-	Source             string         `json:"source"`
-	SessionID          string         `json:"sessionId,omitempty"`
-	SessionStart       int64          `json:"sessionStart"`
-	LastActivity       int64          `json:"lastActivity"`
-	LastEventAt        int64          `json:"lastEventAt,omitempty"`
-	LastUserPrompt     int64          `json:"lastUserPrompt,omitempty"`
-	LastUserInputSig   string         `json:"lastUserInputSig,omitempty"`
-	LastNotification   int64          `json:"lastNotification,omitempty"`
+	Source           string `json:"source"`
+	SessionID        string `json:"sessionId,omitempty"`
+	SessionStart     int64  `json:"sessionStart"`
+	LastActivity     int64  `json:"lastActivity"`
+	LastEventAt      int64  `json:"lastEventAt,omitempty"`
+	LastUserPrompt   int64  `json:"lastUserPrompt,omitempty"`
+	LastUserInputSig string `json:"lastUserInputSig,omitempty"`
+	LastNotification int64  `json:"lastNotification,omitempty"`
 	// What the agent is waiting on, for the notch's attention alerts.
 	AttentionKind string `json:"attentionKind,omitempty"` // permission | question | idle
 	AttentionText string `json:"attentionText,omitempty"`
 	// The GUI app hosting the agent (terminal or editor), found by walking
 	// the process tree; used to hide alerts while that app is frontmost.
-	HostApp    string `json:"hostApp,omitempty"`
-	HostAppPID int32  `json:"hostAppPid,omitempty"`
+	HostApp            string         `json:"hostApp,omitempty"`
+	HostAppPID         int32          `json:"hostAppPid,omitempty"`
 	Status             string         `json:"status"`
 	CurrentTool        string         `json:"currentTool,omitempty"`
 	CurrentFile        string         `json:"currentFile,omitempty"`
@@ -82,16 +82,16 @@ type SessionState struct {
 	Borrowed           bool           `json:"borrowed,omitempty"`
 
 	// Runtime-only overlays (not persisted as authoritative hook fields).
-	LiveSessions      []LiveSession   `json:"liveSessions,omitempty"`
-	LiveCount         *int            `json:"-"`
-	AgentProcessAlive *bool           `json:"-"`
-	AntigravityActive bool            `json:"antigravityActive,omitempty"`
-	ClaudeActive      bool            `json:"claudeActive,omitempty"`
-	SourcesComputed   bool            `json:"-"`
+	LiveSessions      []LiveSession    `json:"liveSessions,omitempty"`
+	LiveCount         *int             `json:"-"`
+	AgentProcessAlive *bool            `json:"-"`
+	AntigravityActive bool             `json:"antigravityActive,omitempty"`
+	ClaudeActive      bool             `json:"claudeActive,omitempty"`
+	SourcesComputed   bool             `json:"-"`
 	AgySession        *SessionSnapshot `json:"agySession,omitempty"`
 	ClaudeSession     *SessionSnapshot `json:"claudeSession,omitempty"`
-	Privacy           *PrivacyVerdict `json:"-"`
-	TriggerFrame      *TriggerFrame   `json:"-"`
+	Privacy           *PrivacyVerdict  `json:"-"`
+	TriggerFrame      *TriggerFrame    `json:"-"`
 }
 
 // SessionSnapshot holds per-agent details when both Antigravity and Claude Code are active.

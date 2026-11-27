@@ -104,10 +104,12 @@ func StoppedPath() string      { return filepath.Join(DataDir(), "stopped") }
 
 // Antigravity directories (CLI, Antigravity 2.0 App, Antigravity IDE).
 func GeminiHome() string       { return filepath.Join(HomeDir(), ".gemini") }
-func AgyConfigDir() string       { return filepath.Join(GeminiHome(), "config") }
-func AgyHooksPath() string       { return filepath.Join(AgyConfigDir(), "hooks.json") }
-func AgyMcpConfigPath() string   { return filepath.Join(AgyConfigDir(), "mcp_config.json") }
-func AgyCLISettingsPath() string { return filepath.Join(GeminiHome(), "antigravity-cli", "settings.json") }
+func AgyConfigDir() string     { return filepath.Join(GeminiHome(), "config") }
+func AgyHooksPath() string     { return filepath.Join(AgyConfigDir(), "hooks.json") }
+func AgyMcpConfigPath() string { return filepath.Join(AgyConfigDir(), "mcp_config.json") }
+func AgyCLISettingsPath() string {
+	return filepath.Join(GeminiHome(), "antigravity-cli", "settings.json")
+}
 
 func AgyBrainDirs() []string {
 	g := GeminiHome()

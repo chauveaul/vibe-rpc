@@ -1,7 +1,6 @@
 package main
 
 import (
-	"strings"
 	"fmt"
 	"image"
 	"image/color"
@@ -9,6 +8,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (

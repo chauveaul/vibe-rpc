@@ -223,7 +223,7 @@ func main() {
 	// uninstall
 	uninstallCmd := &cobra.Command{
 		Use:   "uninstall",
-		Short: "Stop daemon and remove Antigravity/Claude hooks, MCP entry, and autostart",
+		Short: "Stop daemon and remove agent hooks, status lines, MCP entry, and autostart",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			daemon.MarkStopped()
 			daemon.StopAndWait()

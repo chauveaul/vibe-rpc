@@ -2,30 +2,35 @@
 
 <h1 align="center">vibe-rpc</h1>
 
-<p align="center">Discord Rich Presence + coding analytics for <b>Google Antigravity</b> and <b>Claude Code</b>.</p>
+<p align="center">Discord Rich Presence and local coding stats for Antigravity, Claude Code, OpenCode and Codex.</p>
 
-**100% Pure Go** Discord Rich Presence, live status tracking, and coding analytics for **Google Antigravity** and **Claude Code** — combined into one single native binary with **zero JavaScript/TypeScript** anywhere (even the local web dashboard, settings editor, and Wrapped story are pure Go SSR HTML + CSS).
+<p align="center">
+  <a href="https://github.com/chauveaul/vibe-rpc/actions/workflows/ci.yml"><img src="https://github.com/chauveaul/vibe-rpc/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/chauveaul/vibe-rpc/releases"><img src="https://img.shields.io/github/v/release/chauveaul/vibe-rpc" alt="Latest release"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/chauveaul/vibe-rpc" alt="MIT license"></a>
+</p>
 
-Built to match the functionality, paper-and-ink aesthetic, customizability, and Discord Rich Presence card feel of `claude-rpc` while unifying **both Antigravity and Claude Code**.
+vibe-rpc hooks into your coding agents and shows what they are doing on your Discord profile: the project, the current tool and file, and how long the session has run. It also reads your agents' local transcripts to build stats (active time, tokens, API-equivalent cost, streaks, code churn) that you can browse in a terminal UI or a local web dashboard.
+
+It is a single binary for macOS, Linux and Windows.
 
 ## Features
 
-- **Combined Dual-Agent Tracking**
-  - Hooks into **Antigravity** (`~/.gemini/config/hooks.json`, strictly obeying the fail-closed `PreToolUse` `{"decision":"allow"}` contract) and **Claude Code** (`~/.claude/settings.json`, `{"continue":true}`).
-  - Passively merges live sessions from `$TMPDIR/claude-rpc` and scans transcripts from both `~/.gemini/{antigravity,antigravity-cli,antigravity-ide}/brain/` and `~/.claude/projects/`.
-  - Dynamically switches your Discord card's app title between **`Antigravity`** and **`Claude Code`** depending on which agent is active (configurable).
-- **Exact Discord Rich Presence Integration**
-  - Direct raw binary Discord IPC protocol (macOS/Linux Unix sockets + Windows Named Pipes) with automatic arRPC / Vesktop bridge detection, keepalive, sliding-window rate throttling (4 writes / 20s), exponential reconnect backoff, animated GIF status assets, conditional rotation frames, multi-session party counts, and automatic public GitHub repo buttons.
-- **Zero-JS Local Web Suite** (`http://127.0.0.1:47475`)
-  - `/` — Editorial paper-and-ink dashboard with time ranges (`7d`/`30d`/`90d`/`1y`/`all`), live Discord preview rail, pure Go SVG activity & code churn charts, clickable 90-day heatmap day modal, project breakdown drawer, model cost split, language stack, achievements, and leaderboards.
-  - `/settings` — Full visual settings editor for every status (`working`, `thinking`, `compacting`, `shipped`, `notification`, `idle`), live preview, extra rotation frames, custom buttons, source toggles, daemon start/stop/restart + log viewer, and per-workspace privacy (`Public` / `Name only` / `Hidden`).
-  - `/wrapped` — Full-screen pure CSS animated Coding Wrapped story slides.
-- **Interactive Terminal Dashboard (`vibe-rpc`)**
-  - Built with `bubbletea` + `lipgloss`: 7 tabs (`Now`, `Today`, `Week`, `Streak`, `Lifetime`, `Cost`, `Code`), live 3-second refresh, keyboard navigation.
-- **Built-in MCP Server (`vibe-rpc mcp`)**
-  - Exposes `get_lifetime_stats`, `get_today`, `get_top_files`, `get_model_split`, and `get_recap` over stdio JSON-RPC; register globally with `vibe-rpc mcp install`.
-- **Shareable SVG Stat Cards & Exports**
-  - `vibe-rpc badge`, `vibe-rpc card`, `vibe-rpc calendar`, `vibe-rpc session-card`, `vibe-rpc export --csv`, `vibe-rpc recap`, `vibe-rpc statusline`.
+- **Discord Rich Presence** with a card per status (working, thinking, compacting, waiting on you, idle, shipped), animated GIFs, rotating extra lines and optional profile buttons.
+- **Per-agent control.** Choose which agents to track, and separately which ones may appear on Discord.
+- **Per-repository privacy.** Show a repository in full, by name only, or not at all.
+- **Local dashboard** at `http://127.0.0.1:47475` with time ranges, a 12-month heatmap, an agent-by-agent comparison, model cost split, languages and leaderboards.
+- **Settings editor** in the browser for card text, GIFs, goals, a monthly budget, a webhook and command triggers. Changes apply without restarting.
+- **Terminal UI** (`vibe-rpc`) with seven tabs: Now, Today, Week, Streak, Lifetime, Cost and Code.
+- **Wrapped**, a slide-by-slide recap of your stats, plus PNG and SVG cards you can share.
+- **MCP server** so an agent can query your stats.
+- **VibeNotch** (macOS), a status panel in the MacBook notch with usage-limit bars and permission prompts.
+
+## Requirements
+
+- The Discord desktop app, or Vesktop / arRPC, running on the same machine.
+- At least one supported agent: [Antigravity](https://antigravity.google), [Claude Code](https://claude.com/claude-code), [OpenCode](https://opencode.ai) or [Codex CLI](https://developers.openai.com/codex).
+- VibeNotch only: macOS 14 or later.
 
 ## Install
 
@@ -35,112 +40,162 @@ Built to match the functionality, paper-and-ink aesthetic, customizability, and 
 brew install chauveaul/tap/vibe-rpc
 ```
 
-**Install script** (macOS and Linux). It downloads the latest release, verifies its SHA-256 checksum, and installs to `~/.local/bin`:
+**Install script** (macOS and Linux). It downloads the latest release, checks its SHA-256 checksum and installs to `~/.local/bin`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/chauveaul/vibe-rpc/main/install.sh | sh
 ```
 
-Set `VIBE_RPC_VERSION=2.1.0` to pin a version or `VIBE_RPC_INSTALL_DIR=/usr/local/bin` to change where it goes.
+Set `VIBE_RPC_VERSION=2.4.1` to pin a version, or `VIBE_RPC_INSTALL_DIR=/usr/local/bin` to install somewhere else.
 
 **Windows:** download the `.zip` for your CPU from [Releases](https://github.com/chauveaul/vibe-rpc/releases) and put `vibe-rpc.exe` on your `PATH`.
 
-Then run one-time setup:
+**From source** (Go 1.26 or later):
+
+```bash
+go install github.com/chauveaul/vibe-rpc/cmd/vibe-rpc@latest
+```
+
+## Getting started
 
 ```bash
 vibe-rpc setup
 ```
 
-This seeds your config, wires Antigravity & Claude Code hooks, runs an in-process hook self-test, installs OS login autostart, scans your transcript history, and starts the background daemon.
+Setup lists the agents it finds on your machine and asks which to track. Pass `--agents claude,codex` (or `all`) to skip the question. It then:
 
-### Updating
+1. writes a default config,
+2. adds hooks to each agent you picked (Antigravity: `~/.gemini/config/hooks.json`, Claude Code: `~/.claude/settings.json`, Codex: `~/.codex/hooks.json`, OpenCode: a plugin in `~/.config/opencode/plugin/`),
+3. registers vibe-rpc to start at login,
+4. scans your existing transcripts,
+5. starts the background daemon.
 
-```bash
-vibe-rpc upgrade          # install the latest release (restarts the daemon)
-vibe-rpc upgrade --check  # just check
-```
+Your existing hooks are kept. Codex asks you to trust new hooks the first time it runs them.
 
-Homebrew installs update with `brew upgrade vibe-rpc` instead.
-
-### Build from source
-
-Requires Go 1.26+.
-
-```bash
-go build -o vibe-rpc ./cmd/vibe-rpc
-# or install into your $GOPATH/bin:
-go install ./cmd/vibe-rpc
-```
-
-### Releasing (maintainers)
-
-Push a version tag and GitHub Actions does the rest (tests, GoReleaser builds for macOS universal / Linux / Windows on amd64 + arm64, checksums, GitHub release, Homebrew tap formula):
-
-```bash
-git tag v2.1.0 && git push origin v2.1.0
-```
-
-Dry run locally with `goreleaser release --snapshot --clean`.
-
-## OpenCode and Codex
-
-Besides Antigravity and Claude Code, vibe-rpc tracks [OpenCode](https://opencode.ai) and [Codex CLI](https://developers.openai.com/codex). `vibe-rpc setup` lists the agents it finds and asks which to track (or pass `--agents antigravity,claude,opencode,codex`), then wires each one:
-
-- **OpenCode:** a small plugin at `~/.config/opencode/plugin/vibe-rpc.js` forwards prompts, tool calls, permission prompts and idle events. History (tokens, cost, active time, tools) is read from OpenCode's database with `opencode db`.
-- **Codex:** vibe-rpc adds hooks to `~/.codex/hooks.json` (your own hooks are kept; Codex asks you to trust new hooks once). History is read from Codex's session rollouts in `~/.codex/sessions`. Codex doesn't record cost, so its API-equivalent shows as $0.
-
-Both show on Discord, in the dashboard's comparison and running sessions, and in VibeNotch's permission alerts. In **Settings → Agents**, each agent has a **Track** switch and a **Show on Discord** switch, so you can keep an agent's stats without it appearing on your profile.
-
-## VibeNotch (macOS)
-
-A live status panel that lives in your MacBook's notch. While Antigravity or Claude Code is working, small "live activity" ears appear beside the notch: the status GIF on the left and a session timer on the right. Hover under the notch to expand it into your live Discord card, today's hours and goal, usage bars, and buttons for Pause 30m, Dashboard, Settings and Wrapped.
-
-When Claude Code or Antigravity needs a permission or asks you a question, the notch drops down to show the prompt (one row per agent, so it goes lower when both need you) instead of a desktop notification. An alert disappears once you switch to the terminal or editor that agent runs in; clicking it takes you there.
-
-The usage bars show real 5-hour session and weekly plan limits (with reset times) for both **Claude Code** (Pro, Max and Ultra) and **Antigravity CLI** (auto-switching between your Gemini and 3P pools based on the active model). Both CLIs share quotas only with their status line, so turn on **Claude Code usage limits** and/or **Antigravity CLI usage limits** in Settings (neither replaces an existing custom status line, and Antigravity stacks `vibe-rpc statusline` beneath its built-in bar). Until Antigravity limits are enabled, its bar falls back to active time in the rolling 5-hour window.
-
-```bash
-vibe-rpc notch install                   # downloads VibeNotch.app into ~/Applications (no Xcode needed)
-vibe-rpc notch                           # turn it on (or use the switch in Settings)
-vibe-rpc notch off                       # turn it off
-# or build from source (needs Xcode):
-macos/VibeNotch/build-app.sh --install
-```
-
-While it's on, the daemon keeps it running, so it comes back at login. Right-click the notch for **Settings…** or **Turn Off VibeNotch**. It needs no Accessibility or Screen Recording permissions, only takes clicks while it's open, and works on Macs without a notch (it sits at the top center of the screen).
+Start a session in one of your agents and it appears on your Discord profile. Run `vibe-rpc settings` to customise the card, or `vibe-rpc doctor` if nothing shows up.
 
 ## Commands
 
-| Command | Description |
+| Command | What it does |
 | --- | --- |
-| `vibe-rpc` | Launch the 7-tab Bubbletea TUI dashboard |
-| `vibe-rpc setup` | Wire hooks, seed config, scan transcripts, start daemon |
-| `vibe-rpc settings` | Open the zero-JS Settings editor (`:47475/settings`) |
-| `vibe-rpc serve` | Open the zero-JS Web Dashboard (`:47475/`) |
-| `vibe-rpc wrapped` | Open your Coding Wrapped story (`:47475/wrapped`) |
-| `vibe-rpc status [--dump]` | Show daemon status & Discord preview |
-| `vibe-rpc today` / `week` / `projects` | Terminal analytics summaries |
-| `vibe-rpc recap [range]` | Standup-ready coding recap (`today`, `yesterday`, `week`, `7d`) |
-| `vibe-rpc insights` | Habit & dual-agent insights |
-| `vibe-rpc doctor [--fix]` | Diagnose and repair hooks, daemon, Discord IPC, and caches |
-| `vibe-rpc scan [--force]` | Incremental or full transcript rescan |
-| `vibe-rpc pause [30m\|2h\|off]` | Temporarily hide Discord Rich Presence |
-| `vibe-rpc private [on\|off\|name-only]` | Control repo visibility on Discord |
-| `vibe-rpc statcards [badge\|card\|calendar\|session-card]` | Render shareable SVGs |
-| `vibe-rpc mcp [install\|uninstall]` | Stdio MCP server / Antigravity registration |
-| `vibe-rpc start\|stop\|restart\|logs` | Daemon controls |
-| `vibe-rpc upgrade [--check]` | Update to the latest GitHub release |
-| `vibe-rpc notch [on\|off\|install]` | Install or toggle VibeNotch, the live status panel in the MacBook notch (macOS) |
-| `vibe-rpc uninstall` | Remove hooks, MCP config, autostart, and stop daemon |
+| `vibe-rpc` | Open the terminal UI |
+| `vibe-rpc setup` | Pick agents, add hooks, scan history and start the daemon |
+| `vibe-rpc serve` / `settings` / `wrapped` | Open the dashboard, settings editor or Wrapped in your browser |
+| `vibe-rpc start` / `stop` / `restart` / `logs` | Control the background daemon |
+| `vibe-rpc status [--dump]` | Show the daemon state and the current Discord card |
+| `vibe-rpc preview` | Render every status card with your current config |
+| `vibe-rpc vars` | List template variables and their live values |
+| `vibe-rpc today` / `week` / `projects` | Print stats in the terminal |
+| `vibe-rpc recap [today\|yesterday\|week\|7d]` | Print a standup recap (Markdown, or `--json`) |
+| `vibe-rpc insights` | Print habits such as peak hour and best day |
+| `vibe-rpc statcards [badge\|card\|calendar\|session-card]` | Render a shareable SVG, or a PNG with `--png` |
+| `vibe-rpc export [--csv]` | Export your stats as JSON or CSV |
+| `vibe-rpc scan [--force]` | Rescan transcripts (incremental by default) |
+| `vibe-rpc backfill <dir>` | Import transcripts from an archive directory |
+| `vibe-rpc pause [30m\|2h\|off]` | Hide your Discord status for a while |
+| `vibe-rpc private [on\|off\|name-only\|status]` | Set Discord visibility for the current repository |
+| `vibe-rpc statusline` | Print a one-line status for tmux, shell prompts or agent status bars |
+| `vibe-rpc mcp [install\|uninstall]` | Run the MCP server, or register it with Antigravity |
+| `vibe-rpc notch [on\|off\|install]` | Install or toggle VibeNotch (macOS) |
+| `vibe-rpc doctor [--fix]` | Check hooks, config, daemon and Discord connection, and repair them |
+| `vibe-rpc upgrade [--check]` | Update to the latest release |
+| `vibe-rpc uninstall` | Stop the daemon and remove hooks, status lines, MCP entry and autostart |
 
-## Key Go Libraries
+Run `vibe-rpc <command> --help` for all flags.
 
-- [`github.com/spf13/cobra`](https://github.com/spf13/cobra) — CLI commands & shell completions
-- [`github.com/charmbracelet/bubbletea`](https://github.com/charmbracelet/bubbletea) & [`lipgloss`](https://github.com/charmbracelet/lipgloss) — Interactive TUI
-- [`github.com/fsnotify/fsnotify`](https://github.com/fsnotify/fsnotify) — Real-time state/config file watching
-- [`github.com/shirou/gopsutil/v4`](https://github.com/shirou/gopsutil/v4) — Cross-platform process detection (Antigravity + Claude Code)
-- [`github.com/google/uuid`](https://github.com/google/uuid) — Discord IPC frame nonces
+## Configuration
+
+Most settings are easiest to change in the browser (`vibe-rpc settings`). They are stored in `config.json`:
+
+| OS | Config file |
+| --- | --- |
+| macOS | `~/Library/Application Support/vibe-rpc/config.json` |
+| Linux | `$XDG_CONFIG_HOME/vibe-rpc/config.json` (default `~/.config/vibe-rpc/`) |
+| Windows | `%APPDATA%\vibe-rpc\config.json` |
+
+Card text uses template variables such as `{project}`, `{currentToolPretty}` or `{tokensLabel}`. Run `vibe-rpc vars` to see all of them with their current values.
+
+Environment variables:
+
+| Variable | Purpose |
+| --- | --- |
+| `VIBE_RPC_CONFIG` | Use a different config file |
+| `VIBE_RPC_DATA_DIR` | Where stats are stored (default `~/.vibe-rpc`) |
+| `VIBE_RPC_STATE_DIR` | Where the daemon keeps its log and runtime state (default: a `vibe-rpc` folder in the system temp dir) |
+| `VIBE_RPC_PORT` | Port for the local dashboard (default `47475`) |
+
+### Usage limits
+
+Claude Code and Antigravity CLI only report plan limits to their status line. To see 5-hour and weekly limits in the dashboard and VibeNotch, turn on **Claude Code usage limits** and **Antigravity CLI usage limits** in Settings. vibe-rpc will not replace a custom status line you already have. For Antigravity it is added below the built-in status bar.
+
+### Agent notes
+
+- **OpenCode** history is read with `opencode db`.
+- **Codex** history is read from `~/.codex/sessions`. Codex does not record cost, so its API-equivalent cost shows as $0.
+
+## VibeNotch (macOS)
+
+VibeNotch puts a small panel around the MacBook notch. While an agent works, the status GIF and a session timer sit on either side of the notch. Hover below the notch to see your Discord card, today's stats, usage bars and buttons for pause, dashboard, settings and Wrapped. When an agent asks for permission or asks you a question, the panel drops down to show it; clicking the alert takes you to that agent's terminal or editor.
+
+```bash
+vibe-rpc notch install   # download VibeNotch.app into ~/Applications
+vibe-rpc notch           # turn it on
+vibe-rpc notch off       # turn it off
+```
+
+The daemon keeps it running across logins. It needs no Accessibility or Screen Recording permission, and on Macs without a notch it sits at the top centre of the screen. To build it yourself (requires Xcode): `macos/VibeNotch/build-app.sh --install`.
+
+## Privacy
+
+Your stats stay on your machine, in `~/.vibe-rpc`. vibe-rpc talks to Discord through the desktop app's local IPC socket. It only makes network requests when you run `upgrade` or `notch install` (both call the GitHub API) or when you set a webhook in Settings.
+
+Discord shows what your card templates contain. To keep a repository off your profile, run `vibe-rpc private on` inside it, or set it to Hidden or Name only under **Settings → Workspace privacy**. To keep an agent off Discord while still tracking it, turn off its **Show on Discord** switch under **Settings → Agents**.
+
+## Uninstall
+
+```bash
+vibe-rpc uninstall
+```
+
+This stops the daemon and removes the hooks, status lines, MCP entry and login autostart. It leaves your stats and config in place; delete `~/.vibe-rpc` and the config folder above to remove them, then remove the binary (`brew uninstall vibe-rpc` for Homebrew installs).
+
+## Contributing
+
+Bug reports and pull requests are welcome. For larger changes, please open an issue first so we can agree on the approach.
+
+```bash
+git clone https://github.com/chauveaul/vibe-rpc.git
+cd vibe-rpc
+go build ./cmd/vibe-rpc
+go vet ./...
+go test ./...
+```
+
+CI runs `go vet` and `go test` on Linux and macOS, and cross-compiles every release target (macOS, Linux and Windows on amd64 and arm64). Please run `gofmt` on changed files and add tests for new behaviour.
+
+Where things live:
+
+| Path | Contents |
+| --- | --- |
+| `cmd/vibe-rpc` | CLI entry point and commands |
+| `internal/daemon`, `internal/discord`, `internal/presence` | Background daemon, Discord IPC and card selection |
+| `internal/hook`, `internal/install` | Agent hook handler and hook installation |
+| `internal/scanner`, `internal/stats`, `internal/pricing` | Transcript parsing, aggregation and cost estimates |
+| `internal/server` | Web dashboard, settings and Wrapped (HTML templates in `assets/`) |
+| `internal/tui` | Terminal UI |
+| `internal/card` | PNG card rendering |
+| `macos/VibeNotch` | SwiftUI notch app |
+
+### Releasing
+
+Maintainers release by pushing a version tag. GitHub Actions runs the tests, builds every target with GoReleaser, publishes the GitHub release with checksums and updates the Homebrew formula.
+
+```bash
+git tag v2.4.1 && git push origin v2.4.1
+```
+
+To try the release build locally: `goreleaser release --snapshot --clean`.
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+[MIT](./LICENSE)

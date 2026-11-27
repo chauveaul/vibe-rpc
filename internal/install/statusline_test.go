@@ -21,7 +21,7 @@ func TestClaudeStatusLineInstallRules(t *testing.T) {
 	b, _ := os.ReadFile(p)
 	_ = json.Unmarshal(b, &root)
 	sl := root["statusLine"].(map[string]any)
-	if sl["command"] != "/opt/homebrew/bin/vibe-rpc statusline" || root["theme"] != "dark" {
+	if sl["command"] != "/opt/homebrew/bin/vibe-rpc statusline" || root["theme"] != "dark" || sl["refreshInterval"] != float64(defaultClaudeRefreshInterval) {
 		t.Fatalf("settings = %s", b)
 	}
 	if ClaudeStatusLineState(p) != "vibe-rpc" {
@@ -29,6 +29,20 @@ func TestClaudeStatusLineInstallRules(t *testing.T) {
 	}
 	if changed, _ := InstallClaudeStatusLine(p, "/opt/homebrew/bin/vibe-rpc"); changed {
 		t.Fatal("reinstall should be a no-op")
+	}
+	// Custom user refreshInterval is preserved on reinstall.
+	_ = os.WriteFile(p, []byte(`{"statusLine":{"type":"command","command":"/opt/homebrew/bin/vibe-rpc statusline","padding":0,"refreshInterval":15}}`), 0o644)
+	if _, err := InstallClaudeStatusLine(p, "/opt/homebrew/bin/vibe-rpc"); err != nil {
+		t.Fatalf("reinstall with custom refreshInterval failed: %v", err)
+	}
+	b, _ = os.ReadFile(p)
+	root = nil
+	_ = json.Unmarshal(b, &root)
+	if got := root["statusLine"].(map[string]any)["refreshInterval"]; got != float64(15) {
+		t.Fatalf("custom refreshInterval was overwritten: got %v (%s)", got, b)
+	}
+	if changed, err := InstallClaudeStatusLine(p, "/opt/homebrew/bin/vibe-rpc"); changed || err != nil {
+		t.Fatalf("second reinstall with custom refreshInterval should be a no-op, got changed=%v err=%v", changed, err)
 	}
 	if changed, err := UninstallClaudeStatusLine(p); !changed || err != nil || ClaudeStatusLineState(p) != "none" {
 		t.Fatalf("uninstall = %v, %v", changed, err)

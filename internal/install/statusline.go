@@ -91,9 +91,34 @@ func ClaudeStatusLineState(settingsPath string) string {
 	}
 }
 
+// defaultClaudeRefreshInterval asks Claude Code to re-run `vibe-rpc statusline`
+// periodically (in seconds) even while the main thread is waiting on background
+// subagents or sitting idle at the prompt. Without it, statusLine only fires on
+// main-thread assistant messages and usage bars freeze during long subagents.
+const defaultClaudeRefreshInterval = 30
+
+func existingRefreshInterval(v any) int {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return 0
+	}
+	switch n := m["refreshInterval"].(type) {
+	case float64:
+		if n >= 1 {
+			return int(n)
+		}
+	case int:
+		if n >= 1 {
+			return n
+		}
+	}
+	return 0
+}
+
 // InstallClaudeStatusLine makes `vibe-rpc statusline` Claude Code's status
-// line. It refreshes an existing vibe-rpc entry (e.g. a new binary path) but
-// returns ErrOtherStatusLine rather than replacing someone else's.
+// line. It refreshes an existing vibe-rpc entry (e.g. a new binary path or
+// missing refreshInterval) but returns ErrOtherStatusLine rather than
+// replacing someone else's.
 func InstallClaudeStatusLine(settingsPath, binPath string) (bool, error) {
 	if settingsPath == "" {
 		settingsPath = paths.ClaudeSettingsPath()
@@ -108,10 +133,15 @@ func InstallClaudeStatusLine(settingsPath, binPath string) (bool, error) {
 	if sl, ok := root["statusLine"]; ok && sl != nil && !isVibeStatusLine(sl) {
 		return false, ErrOtherStatusLine
 	}
+	refresh := existingRefreshInterval(root["statusLine"])
+	if refresh <= 0 {
+		refresh = defaultClaudeRefreshInterval
+	}
 	root["statusLine"] = map[string]any{
-		"type":    "command",
-		"command": shellQuote(binPath) + " statusline",
-		"padding": 0,
+		"type":            "command",
+		"command":         shellQuote(binPath) + " statusline",
+		"padding":         0,
+		"refreshInterval": refresh,
 	}
 	return writeSettingsJSON(settingsPath, root, orig)
 }
@@ -240,16 +270,26 @@ func staleStatusLine(sl any, binPath string, force bool) bool {
 }
 
 // RepairStatusLines points vibe-rpc's Claude Code and Antigravity CLI status
-// lines at binPath (ResolveBinary() when empty). Without force it only
-// touches one whose binary is missing; status lines that belong to other
-// tools, or that vibe-rpc doesn't manage, are never changed.
+// lines at binPath (ResolveBinary() when empty), and adds refreshInterval to
+// existing Claude Code vibe-rpc status lines that predate it so usage keeps
+// updating while waiting on background subagents. Without force it leaves a
+// working binary path alone; status lines that belong to other tools, or that
+// vibe-rpc doesn't manage, are never changed.
 func RepairStatusLines(binPath string, force bool) (claude, agy bool) {
 	if binPath == "" {
 		binPath = ResolveBinary()
 	}
 	if ClaudeStatusLineState("") == "vibe-rpc" {
-		if root, _, err := readSettingsJSON(paths.ClaudeSettingsPath()); err == nil && staleStatusLine(root["statusLine"], binPath, force) {
-			claude, _ = InstallClaudeStatusLine("", binPath)
+		if root, orig, err := readSettingsJSON(paths.ClaudeSettingsPath()); err == nil {
+			sl := root["statusLine"]
+			if staleStatusLine(sl, binPath, force) {
+				claude, _ = InstallClaudeStatusLine("", binPath)
+			} else if existingRefreshInterval(sl) <= 0 {
+				if m, ok := sl.(map[string]any); ok {
+					m["refreshInterval"] = defaultClaudeRefreshInterval
+					claude, _ = writeSettingsJSON(paths.ClaudeSettingsPath(), root, orig)
+				}
+			}
 		}
 	}
 	if AgyStatusLineState("") == "vibe-rpc" {

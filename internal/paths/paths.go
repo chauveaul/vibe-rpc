@@ -126,6 +126,15 @@ func ClaudeProjectsDir() string { return filepath.Join(ClaudeHome(), "projects")
 func ClaudeSettingsPath() string {
 	return filepath.Join(ClaudeHome(), "settings.json")
 }
+func ClaudeConfigPath() string {
+	if p := os.Getenv("VIBE_RPC_CLAUDE_CONFIG"); p != "" {
+		return p
+	}
+	if d := os.Getenv("CLAUDE_CONFIG_DIR"); d != "" {
+		return filepath.Join(d, ".claude.json")
+	}
+	return filepath.Join(HomeDir(), ".claude.json")
+}
 func ClaudeRPCStateDir() string {
 	if d := os.Getenv("CLAUDE_RPC_STATE_DIR"); d != "" {
 		return d

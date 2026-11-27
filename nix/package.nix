@@ -9,7 +9,7 @@ buildGoModule (finalAttrs: {
   pname = "vibe-rpc";
   # Keep in step with the release tag; the release workflow refuses to
   # publish when they differ.
-  version = "2.4.3";
+  version = "2.4.4";
 
   src = lib.fileset.toSource {
     root = ../.;

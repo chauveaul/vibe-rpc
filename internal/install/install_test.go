@@ -213,11 +213,30 @@ func TestRepairStatusLines(t *testing.T) {
 		t.Fatalf("RepairStatusLines = %v, %v; want true, false", claude, agy)
 	}
 	b, _ := os.ReadFile(claudePath)
-	if !strings.Contains(string(b), newBin+" statusline") || !strings.Contains(string(b), `"theme": "dark"`) {
+	if !strings.Contains(string(b), newBin+" statusline") || !strings.Contains(string(b), `"theme": "dark"`) || !strings.Contains(string(b), `"refreshInterval": 30`) {
 		t.Fatalf("settings not repaired as expected:\n%s", b)
 	}
 	// Running again changes nothing.
 	if claude, _ := RepairStatusLines(newBin, false); claude {
 		t.Error("second repair should be a no-op")
+	}
+
+	// A working binary missing refreshInterval gets refreshInterval added without changing its binary path.
+	alive := filepath.Join(home, "custom-bin", "vibe-rpc")
+	if err := os.MkdirAll(filepath.Dir(alive), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(alive, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(claudePath, []byte(`{"statusLine":{"type":"command","command":"`+alive+` statusline","padding":0}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if claude, _ := RepairStatusLines(newBin, false); !claude {
+		t.Fatal("expected RepairStatusLines to add missing refreshInterval")
+	}
+	b, _ = os.ReadFile(claudePath)
+	if !strings.Contains(string(b), alive+" statusline") || !strings.Contains(string(b), `"refreshInterval": 30`) {
+		t.Fatalf("repair should preserve working binary while adding refreshInterval:\n%s", b)
 	}
 }

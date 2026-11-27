@@ -94,13 +94,21 @@ func ResolveBinary() string {
 	return exe
 }
 
-// StableBinaryPath maps a Homebrew keg path such as
-// /opt/homebrew/Cellar/vibe-rpc/2.1.0/bin/vibe-rpc to the prefix symlink
-// /opt/homebrew/bin/vibe-rpc, which survives `brew upgrade` (the versioned
-// keg is deleted on cleanup, which would break hooks and autostart). Any
-// other path is returned unchanged.
+// StableBinaryPath maps a versioned package path to a link that survives
+// upgrades, so hooks and autostart keep working after the old version is
+// cleaned up:
+//   - a Homebrew keg such as /opt/homebrew/Cellar/vibe-rpc/2.1.0/bin/vibe-rpc
+//     becomes the prefix symlink /opt/homebrew/bin/vibe-rpc;
+//   - a Nix store path becomes the profile link on PATH (for example
+//     ~/.nix-profile/bin/vibe-rpc), since garbage collection deletes old
+//     store paths.
+//
+// Any other path, or one without a matching link, is returned unchanged.
 func StableBinaryPath(real string) string {
 	slash := filepath.ToSlash(real)
+	if strings.HasPrefix(slash, "/nix/store/") {
+		return pathLinkTo(real)
+	}
 	i := strings.Index(slash, "/Cellar/")
 	if i < 0 {
 		return real
@@ -114,6 +122,27 @@ func StableBinaryPath(real string) string {
 		}
 	}
 	return real
+}
+
+// pathLinkTo returns the PATH entry for real's file name when it resolves to
+// real itself and lives outside the Nix store; otherwise real.
+func pathLinkTo(real string) string {
+	p, err := exec.LookPath(filepath.Base(real))
+	if err != nil {
+		return real
+	}
+	if abs, err := filepath.Abs(p); err == nil {
+		p = abs
+	}
+	if p == real || strings.HasPrefix(filepath.ToSlash(p), "/nix/store/") {
+		return real
+	}
+	a, errA := os.Stat(p)
+	b, errB := os.Stat(real)
+	if errA != nil || errB != nil || !os.SameFile(a, b) {
+		return real
+	}
+	return p
 }
 
 func shellQuote(p string) string {

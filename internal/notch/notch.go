@@ -16,9 +16,13 @@ var ErrNotInstalled = errors.New("VibeNotch.app not found in ~/Applications or /
 // Supported reports whether VibeNotch can run on this OS.
 func Supported() bool { return runtime.GOOS == "darwin" }
 
-// Find locates VibeNotch.app: the usual install locations, then a dev build
-// next to the repo checkout the vibe-rpc binary lives in.
+// Find locates VibeNotch.app: the copy a package manager installed with this
+// vibe-rpc (it matches the binary's version), the usual install locations,
+// then a dev build next to the repo checkout the vibe-rpc binary lives in.
 func Find(exe string) string {
+	if app := Bundled(exe); app != "" {
+		return app
+	}
 	home, _ := os.UserHomeDir()
 	cands := []string{
 		filepath.Join(home, "Applications", "VibeNotch.app"),
@@ -53,7 +57,11 @@ func Launch(exe string) (string, error) {
 	if app == "" {
 		return "", ErrNotInstalled
 	}
-	return app, exec.Command("open", "-a", app, "--args", "--vibe-rpc", exe).Run()
+	if err := exec.Command("open", "-a", app, "--args", "--vibe-rpc", exe).Run(); err != nil {
+		return app, err
+	}
+	recordLaunch(app)
+	return app, nil
 }
 
 // Quit stops any running VibeNotch.

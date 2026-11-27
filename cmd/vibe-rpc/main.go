@@ -115,7 +115,7 @@ func main() {
 
 	root := &cobra.Command{
 		Use:     "vibe-rpc",
-		Short:   "Discord Rich Presence & coding analytics for Antigravity, Claude Code, OpenCode and Codex",
+		Short:   "Discord Rich Presence and local coding stats for AI coding agents",
 		Version: paths.Version,
 		// Print just the error, not the whole usage block, when a command fails.
 		SilenceUsage: true,
@@ -130,9 +130,9 @@ func main() {
 	setupCmd := &cobra.Command{
 		Use:     "setup",
 		Aliases: []string{"install"},
-		Short:   "Pick your coding agents, wire their hooks, seed config, scan history, and start the daemon",
+		Short:   "Pick agents, wire their hooks, start the daemon",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println("Setting up vibe-rpc (pure Go)...")
+			fmt.Println("Setting up vibe-rpc…")
 			if created, err := install.SeedConfig(""); err != nil {
 				return err
 			} else if created {
@@ -187,6 +187,9 @@ func main() {
 					fmt.Println("  ✓ OpenCode plugin already installed")
 				}
 			}
+			if claude, agy := install.RepairStatusLines("", true); claude || agy {
+				fmt.Println("  ✓ pointed the usage-limit status line at this binary")
+			}
 			if err := install.SelfTestHooks(); err != nil {
 				return err
 			}
@@ -223,7 +226,7 @@ func main() {
 	// uninstall
 	uninstallCmd := &cobra.Command{
 		Use:   "uninstall",
-		Short: "Stop daemon and remove agent hooks, status lines, MCP entry, and autostart",
+		Short: "Remove hooks and autostart; keeps your stats",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			daemon.MarkStopped()
 			daemon.StopAndWait()
@@ -282,15 +285,15 @@ func main() {
 			return server.Serve(addr)
 		}
 	}
-	serveCmd := &cobra.Command{Use: "serve", Short: "Open the local web dashboard", RunE: servePage("/")}
+	serveCmd := &cobra.Command{Use: "serve", Short: "Open the web dashboard", RunE: servePage("/")}
 	serveCmd.Flags().BoolVar(&noOpen, "no-open", false, "Do not automatically open the browser")
 	serveCmd.Flags().IntVar(&portFlag, "port", 0, "Port to bind on 127.0.0.1 (default 47475)")
 
-	settingsCmd := &cobra.Command{Use: "settings", Short: "Open the visual settings editor in your browser", RunE: servePage("/settings")}
+	settingsCmd := &cobra.Command{Use: "settings", Short: "Edit your card, agents and privacy in the browser", RunE: servePage("/settings")}
 	settingsCmd.Flags().BoolVar(&noOpen, "no-open", false, "Do not automatically open the browser")
 	settingsCmd.Flags().IntVar(&portFlag, "port", 0, "Port to bind on 127.0.0.1 (default 47475)")
 
-	wrappedCmd := &cobra.Command{Use: "wrapped", Short: "Open your Coding Wrapped story in your browser", RunE: servePage("/wrapped")}
+	wrappedCmd := &cobra.Command{Use: "wrapped", Short: "Your stats as a slide-by-slide story", RunE: servePage("/wrapped")}
 	wrappedCmd.Flags().BoolVar(&noOpen, "no-open", false, "Do not automatically open the browser")
 	wrappedCmd.Flags().IntVar(&portFlag, "port", 0, "Port to bind on 127.0.0.1 (default 47475)")
 
@@ -303,7 +306,7 @@ func main() {
 	}
 	startCmd := &cobra.Command{
 		Use:   "start",
-		Short: "Start the background Discord Rich Presence daemon",
+		Short: "Start the background daemon",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			daemon.ClearStopped()
 			if pid := daemon.AlivePID(); pid > 0 {
@@ -320,7 +323,7 @@ func main() {
 	}
 	stopCmd := &cobra.Command{
 		Use:   "stop",
-		Short: "Stop the background daemon",
+		Short: "Stop the daemon",
 		Run: func(cmd *cobra.Command, args []string) {
 			daemon.MarkStopped()
 			daemon.StopAndWait()
@@ -329,7 +332,7 @@ func main() {
 	}
 	restartCmd := &cobra.Command{
 		Use:   "restart",
-		Short: "Restart the background daemon",
+		Short: "Restart the daemon",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			daemon.ClearStopped()
 			daemon.StopAndWait()
@@ -364,7 +367,7 @@ func main() {
 	statusCmd := &cobra.Command{
 		Use:     "status",
 		Aliases: []string{"dump"},
-		Short:   "Show current daemon status, active session, and Discord card preview",
+		Short:   "Daemon state and what Discord shows right now",
 		Run: func(cmd *cobra.Command, args []string) {
 			cfg, agg, st := resolveLiveState()
 			vars := format.BuildVars(st, cfg, agg)
@@ -404,7 +407,7 @@ func main() {
 	// today
 	todayCmd := &cobra.Command{
 		Use:   "today",
-		Short: "Print today's combined coding stats",
+		Short: "Today's time, tokens and cost",
 		Run: func(cmd *cobra.Command, args []string) {
 			agg := loadAggOrScan()
 			dk := scanner.DayKey(time.Now().UnixMilli())
@@ -425,7 +428,7 @@ func main() {
 	var compareFlag bool
 	weekCmd := &cobra.Command{
 		Use:   "week",
-		Short: "Print a 7-day activity breakdown",
+		Short: "The last 7 days, one line each",
 		Run: func(cmd *cobra.Command, args []string) {
 			agg := loadAggOrScan()
 			rows := stats.WeekGrid(agg, 7)
@@ -452,7 +455,7 @@ func main() {
 	var projLimit int
 	projectsCmd := &cobra.Command{
 		Use:   "projects [name]",
-		Short: "List projects ranked by active time or inspect a single project",
+		Short: "Projects by active time, or one in detail",
 		Run: func(cmd *cobra.Command, args []string) {
 			agg := loadAggOrScan()
 			if agg == nil || len(agg.Projects) == 0 {
@@ -493,7 +496,7 @@ func main() {
 	var recapMD, recapJSON bool
 	recapCmd := &cobra.Command{
 		Use:   "recap [today|yesterday|week|Nd]",
-		Short: "Generate a standup-ready coding recap",
+		Short: "A standup summary, yesterday by default",
 		Run: func(cmd *cobra.Command, args []string) {
 			rng := "yesterday"
 			if len(args) > 0 {
@@ -514,7 +517,7 @@ func main() {
 	// insights
 	insightsCmd := &cobra.Command{
 		Use:   "insights",
-		Short: "Print data-driven insights about your coding habits",
+		Short: "Peak hour, best day, streaks and hotspots",
 		Run: func(cmd *cobra.Command, args []string) {
 			for _, line := range stats.GenerateInsights(loadAggOrScan()) {
 				fmt.Printf("→ %s\n", line)
@@ -527,7 +530,7 @@ func main() {
 	var exportOut string
 	exportCmd := &cobra.Command{
 		Use:   "export",
-		Short: "Export combined coding stats as JSON or CSV",
+		Short: "All your stats as JSON, or days as CSV",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			agg := loadAggOrScan()
 			var data []byte
@@ -554,7 +557,7 @@ func main() {
 	statcardsCmd := &cobra.Command{
 		Use:     "statcards [badge|card|calendar|session-card]",
 		Aliases: []string{"badge", "card", "calendar", "session-card"},
-		Short:   "Render shareable SVG badges, poster cards (or a PNG with --png), and heatmaps",
+		Short:   "Badges, cards and heatmaps as SVG or PNG",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			kind := cmd.CalledAs()
 			if kind == "statcards" {
@@ -641,7 +644,7 @@ func main() {
 	var slTpl string
 	statuslineCmd := &cobra.Command{
 		Use:   "statusline",
-		Short: "Print a single-line status string for tmux / shell prompts / status bars",
+		Short: "One-line status for tmux, prompts and agents",
 		Run: func(cmd *cobra.Command, args []string) {
 			// Claude Code pipes its session JSON (incl. rate limits) on stdin.
 			if payload := readPipedStdin(300*time.Millisecond, 1<<20); len(payload) > 0 {
@@ -660,12 +663,12 @@ func main() {
 	// mcp
 	mcpCmd := &cobra.Command{
 		Use:   "mcp [install|uninstall]",
-		Short: "Run the stdio MCP server or register it in ~/.gemini/config/mcp_config.json",
+		Short: "Let an agent query your stats over MCP",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
 				switch args[0] {
 				case "install":
-					if err := mcp.InstallConfig("", ""); err != nil {
+					if err := mcp.InstallConfig("", install.ResolveBinary()); err != nil {
 						return err
 					}
 					fmt.Printf("Registered vibe-rpc MCP server in %s\n", paths.AgyMcpConfigPath())
@@ -691,7 +694,7 @@ func main() {
 	privateCmd := &cobra.Command{
 		Use:     "private [on|off|name-only|status]",
 		Aliases: []string{"public", "privacy"},
-		Short:   "Manage Discord visibility for the current working directory",
+		Short:   "Hide this repo on Discord, or show only its name",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()
 			if err != nil {
@@ -731,7 +734,7 @@ func main() {
 	pauseCmd := &cobra.Command{
 		Use:     "pause [duration|off|status]",
 		Aliases: []string{"resume", "unpause"},
-		Short:   "Temporarily pause Discord Rich Presence (e.g. 30m, 2h, off)",
+		Short:   "Hide your Discord status for a while",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cmd.CalledAs() == "resume" || cmd.CalledAs() == "unpause" {
 				pause.Clear("")
@@ -772,7 +775,7 @@ func main() {
 	logsCmd := &cobra.Command{
 		Use:     "logs",
 		Aliases: []string{"tail", "log"},
-		Short:   "Show recent daemon log entries",
+		Short:   "The latest daemon log lines",
 		Run: func(cmd *cobra.Command, args []string) {
 			b, err := os.ReadFile(paths.LogPath())
 			if err != nil {
@@ -792,7 +795,7 @@ func main() {
 	var fixFlag bool
 	doctorCmd := &cobra.Command{
 		Use:   "doctor",
-		Short: "Diagnose hooks, config, daemon, Discord IPC, and transcript caches",
+		Short: "Diagnose hooks, daemon and Discord (--fix)",
 		Run: func(cmd *cobra.Command, args []string) {
 			if fixFlag {
 				actions := doctor.Fix()
@@ -829,7 +832,7 @@ func main() {
 	scanCmd := &cobra.Command{
 		Use:     "scan",
 		Aliases: []string{"rescan"},
-		Short:   "Scan Antigravity, Claude Code, OpenCode and Codex transcripts into the aggregate cache",
+		Short:   "Re-read your agents' transcripts into your stats",
 		Run: func(cmd *cobra.Command, args []string) {
 			res := scanner.Scan(scanner.ScanOptions{Force: forceScan || cmd.CalledAs() == "rescan"})
 			fmt.Printf("Scanned %d files (%d parsed, %d cached, %d pruned). Total sessions: %d\n",
@@ -841,7 +844,7 @@ func main() {
 	// backfill
 	backfillCmd := &cobra.Command{
 		Use:   "backfill <dir>",
-		Short: "Scan an additional archive directory of JSONL transcripts",
+		Short: "Import transcripts from an archive folder",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			abs, err := filepath.Abs(args[0])
@@ -857,7 +860,7 @@ func main() {
 	// preview & vars
 	previewCmd := &cobra.Command{
 		Use:   "preview",
-		Short: "Preview how every status card renders with your current config and stats",
+		Short: "Every card, rendered with your config and stats",
 		Run: func(cmd *cobra.Command, args []string) {
 			cfg, agg, st := resolveLiveState()
 			if st.Cwd == "" {
@@ -879,7 +882,7 @@ func main() {
 	}
 	varsCmd := &cobra.Command{
 		Use:   "vars",
-		Short: "List all template variables and their live values",
+		Short: "Template variables and their live values",
 		Run: func(cmd *cobra.Command, args []string) {
 			cfg, agg, st := resolveLiveState()
 			vars := format.BuildVars(st, cfg, agg)
@@ -897,7 +900,7 @@ func main() {
 	// assets export (Antigravity Discord GIFs)
 	assetsCmd := &cobra.Command{
 		Use:   "assets",
-		Short: "Export built-in animated Antigravity GIFs for Discord Rich Presence",
+		Short: "Save the built-in status GIFs to a folder",
 	}
 	assetsExportCmd := &cobra.Command{
 		Use:   "export [dir]",
@@ -939,7 +942,7 @@ func main() {
 	}
 	notchCmd := &cobra.Command{
 		Use:       "notch [on|off|install]",
-		Short:     "Install or toggle VibeNotch, the live status panel in your MacBook's notch (macOS)",
+		Short:     "The status panel in your MacBook's notch",
 		Args:      cobra.MaximumNArgs(1),
 		ValidArgs: []string{"on", "off", "install"},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -947,6 +950,13 @@ func main() {
 				return fmt.Errorf("VibeNotch is macOS-only")
 			}
 			if len(args) == 1 && args[0] == "install" {
+				if exe, err := os.Executable(); err == nil {
+					if app := notch.Bundled(exe); app != "" {
+						fmt.Printf("VibeNotch already comes with this install (%s) and updates with it.\n", app)
+						fmt.Println("Turn it on with `vibe-rpc notch`.")
+						return nil
+					}
+				}
 				ctx, cancel := context.WithTimeout(cmd.Context(), 3*time.Minute)
 				defer cancel()
 				wasRunning := notch.Running()
@@ -1006,7 +1016,7 @@ func main() {
 	upgradeCmd := &cobra.Command{
 		Use:     "upgrade",
 		Aliases: []string{"update"},
-		Short:   "Update vibe-rpc to the latest GitHub release",
+		Short:   "Update to the latest release",
 		Long: `Checks GitHub Releases for a newer vibe-rpc, downloads the build for this
 platform, verifies its SHA-256 checksum, checks the new binary runs, and
 replaces the current executable. A running daemon is restarted on the new
@@ -1053,6 +1063,15 @@ version. Homebrew/Scoop installs should be upgraded with their package manager.`
 				return err
 			}
 			fmt.Printf("Installed vibe-rpc %s at %s\n", rel.Version(), exe)
+			// Keep a separately installed VibeNotch on the same version; the
+			// restarted daemon relaunches it.
+			if app := notch.Find(exe); app != "" && notch.Bundled(exe) == "" && notch.AppVersion(app) != rel.Version() {
+				if res, err := notch.InstallLatest(ctx, notch.InstallOptions{Release: &rel, DestDir: filepath.Dir(app)}); err != nil {
+					fmt.Printf("Couldn't update VibeNotch: %v (run `vibe-rpc notch install`)\n", err)
+				} else {
+					fmt.Printf("Updated VibeNotch to %s.\n", res.Version)
+				}
+			}
 			if daemon.AlivePID() > 0 {
 				daemon.ClearStopped()
 				daemon.StopAndWait()
@@ -1077,6 +1096,7 @@ version. Homebrew/Scoop installs should be upgraded with their package manager.`
 		privateCmd, pauseCmd, logsCmd, doctorCmd, scanCmd, backfillCmd,
 		previewCmd, varsCmd, assetsCmd,
 	)
+	installHelp(root)
 
 	if err := root.Execute(); err != nil {
 		os.Exit(1)

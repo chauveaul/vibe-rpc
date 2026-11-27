@@ -180,3 +180,22 @@ func TestCodexEvents(t *testing.T) {
 		t.Fatalf("approval should clear the alert: %+v", st)
 	}
 }
+
+// A Claude Code session first seen after SessionStart must not inherit the
+// default Antigravity model ("gemini") from a freshly created state file.
+func TestClaudeSessionFirstSeenMidStreamModel(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("VIBE_RPC_STATE_DIR", tmp)
+	t.Setenv("VIBE_RPC_DATA_DIR", filepath.Join(tmp, "data"))
+	t.Setenv("VIBE_RPC_NO_AUTOSTART", "1")
+	var out bytes.Buffer
+	RunCLI("PreToolUse", "claude", bytes.NewBufferString(`{"session_id":"cc-mid","cwd":"/tmp/app","tool_name":"Bash","tool_input":{"command":"ls"}}`), &out)
+	if st := state.Read("cc-mid"); st.Model != "claude" {
+		t.Fatalf("model = %q, want claude", st.Model)
+	}
+	// An Antigravity session keeps its default.
+	RunCLI("PreToolUse", "antigravity", bytes.NewBufferString(`{"conversationId":"agy-mid","workspacePaths":["/tmp/app"],"hookEventName":"PreToolUse","toolCall":{"name":"view_file","args":{}}}`), &out)
+	if st := state.Read("agy-mid"); st.Model != "gemini" {
+		t.Fatalf("antigravity model = %q, want gemini", st.Model)
+	}
+}

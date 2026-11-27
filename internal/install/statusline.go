@@ -203,3 +203,59 @@ func UninstallAgyStatusLine(settingsPath string) (bool, error) {
 	delete(root, "statusLine")
 	return writeSettingsJSON(settingsPath, root, orig)
 }
+
+// statusLineBinary returns the executable a status line command runs: the
+// first word, or the quoted path shellQuote produced.
+func statusLineBinary(cmd string) string {
+	cmd = strings.TrimSpace(cmd)
+	if strings.HasPrefix(cmd, `"`) {
+		if end := strings.Index(cmd[1:], `"`); end >= 0 {
+			return cmd[1 : end+1]
+		}
+		return ""
+	}
+	if i := strings.IndexAny(cmd, " \t"); i >= 0 {
+		return cmd[:i]
+	}
+	return cmd
+}
+
+// staleStatusLine reports whether a vibe-rpc status line should be pointed at
+// binPath: always when force is set and the path differs, otherwise only when
+// the binary it runs no longer exists (e.g. a deleted dev build), so two
+// working installs don't keep overwriting each other.
+func staleStatusLine(sl any, binPath string, force bool) bool {
+	cur := statusLineBinary(statusLineCommand(sl))
+	if cur == "" || cur == binPath {
+		return false
+	}
+	if force {
+		return true
+	}
+	if !strings.ContainsRune(cur, os.PathSeparator) {
+		return false // bare "vibe-rpc", resolved through PATH
+	}
+	_, err := os.Stat(cur)
+	return errors.Is(err, os.ErrNotExist)
+}
+
+// RepairStatusLines points vibe-rpc's Claude Code and Antigravity CLI status
+// lines at binPath (ResolveBinary() when empty). Without force it only
+// touches one whose binary is missing; status lines that belong to other
+// tools, or that vibe-rpc doesn't manage, are never changed.
+func RepairStatusLines(binPath string, force bool) (claude, agy bool) {
+	if binPath == "" {
+		binPath = ResolveBinary()
+	}
+	if ClaudeStatusLineState("") == "vibe-rpc" {
+		if root, _, err := readSettingsJSON(paths.ClaudeSettingsPath()); err == nil && staleStatusLine(root["statusLine"], binPath, force) {
+			claude, _ = InstallClaudeStatusLine("", binPath)
+		}
+	}
+	if AgyStatusLineState("") == "vibe-rpc" {
+		if root, _, err := readSettingsJSON(paths.AgyCLISettingsPath()); err == nil && staleStatusLine(root["statusLine"], binPath, force) {
+			agy, _ = InstallAgyStatusLine("", binPath)
+		}
+	}
+	return claude, agy
+}

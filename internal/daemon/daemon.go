@@ -118,6 +118,13 @@ func Run() error {
 		r.cleanup()
 	}()
 
+	// A status line left pointing at a binary that no longer exists (an old
+	// dev build, a removed install) silently stops plan-limit updates, so
+	// repoint it at this binary.
+	if claude, agy := install.RepairStatusLines("", false); claude || agy {
+		log.Log("repaired status line binary path (claude=%v, antigravity=%v)", claude, agy)
+	}
+
 	log.Log("daemon starting (pid=%d, version=%s, sources=antigravity:%v,claude:%v)",
 		os.Getpid(), paths.Version, r.cfg.Sources.WantAntigravity(), r.cfg.Sources.WantClaude())
 
@@ -178,6 +185,12 @@ func Run() error {
 	defer pollTicker.Stop()
 	r.ensureNotch()
 
+	// Restart into a new version when the binary on disk is upgraded (brew
+	// upgrade, install.sh) instead of running stale code until next login.
+	bin := newBinaryWatch()
+	upgradeTicker := time.NewTicker(time.Minute)
+	defer upgradeTicker.Stop()
+
 	for {
 		select {
 		case sig := <-sigCh:
@@ -216,6 +229,15 @@ func Run() error {
 		case <-sweepTicker.C:
 			if n := state.SweepStale(6 * time.Hour); n > 0 {
 				log.Log("swept %d stale state files", n)
+			}
+		case <-upgradeTicker.C:
+			if v := bin.newVersion(); v != "" && canExecSelf {
+				log.Log("vibe-rpc %s was installed over %s — restarting into it", v, paths.Version)
+				r.cleanup()
+				if err := execSelf(bin.path); err != nil {
+					log.Log("restart into %s failed: %v", bin.path, err)
+				}
+				return nil
 			}
 		}
 	}
@@ -801,14 +823,27 @@ func (r *Runner) ensureNotch() {
 	r.mu.Lock()
 	enabled := r.cfg.Notch.Enabled
 	r.mu.Unlock()
-	if !enabled || !notch.Supported() || notch.Running() {
+	if !enabled || !notch.Supported() {
 		return
 	}
 	exe, err := os.Executable()
 	if err != nil {
 		return
 	}
-	if app, err := notch.Launch(install.StableBinaryPath(exe)); err == nil {
+	exe = install.StableBinaryPath(exe)
+	if notch.Running() {
+		// After an upgrade (e.g. brew upgrade replaced the bundled app) the
+		// old VibeNotch keeps running until it's relaunched.
+		if !notch.Stale(exe) {
+			return
+		}
+		r.log.Log("VibeNotch is out of date; relaunching %s", notch.Find(exe))
+		notch.Quit()
+		for i := 0; i < 20 && notch.Running(); i++ {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	if app, err := notch.Launch(exe); err == nil {
 		r.log.Log("launched VibeNotch (%s)", app)
 	}
 }

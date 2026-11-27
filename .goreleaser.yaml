@@ -57,8 +57,8 @@ release:
     ## Install
 
     ```sh
-    brew install chauveaul/tap/vibe-rpc
-    # or
+    brew install chauveaul/tap/vibe-rpc                  # Homebrew
+    nix profile install github:chauveaul/vibe-rpc        # Nix
     curl -fsSL https://raw.githubusercontent.com/chauveaul/vibe-rpc/main/install.sh | sh
     ```
 

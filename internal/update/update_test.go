@@ -68,8 +68,16 @@ func TestManagedBy(t *testing.T) {
 	if ManagedBy("/opt/homebrew/Cellar/vibe-rpc/2.0.0/bin/vibe-rpc") == "" {
 		t.Error("Homebrew path not detected")
 	}
-	if ManagedBy("/usr/local/bin/vibe-rpc") != "" {
-		t.Error("plain path flagged as managed")
+	if ManagedBy("/nix/store/abc-vibe-rpc-2.4.1/bin/vibe-rpc") == "" {
+		t.Error("Nix store path not detected")
+	}
+	if ManagedBy("/usr/bin/vibe-rpc") == "" {
+		t.Error("system package path not detected")
+	}
+	for _, p := range []string{"/usr/local/bin/vibe-rpc", "/home/me/.local/bin/vibe-rpc"} {
+		if ManagedBy(p) != "" {
+			t.Errorf("%s flagged as managed", p)
+		}
 	}
 }
 

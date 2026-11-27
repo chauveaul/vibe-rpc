@@ -9,4 +9,6 @@ config.json
 *.svg
 !assets/vibe-rpc-icon.png
 !assets/vibe-rpc-icon.svg
+!assets/screenshots/*.png
+/.playwright-mcp/
 /dist/

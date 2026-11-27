@@ -36,3 +36,17 @@ jobs:
             echo "== $t"
             CGO_ENABLED=0 GOOS=${t%/*} GOARCH=${t#*/} go build -o /dev/null ./cmd/vibe-rpc
           done
+
+  # Builds the flake (and runs its tests) on Linux and macOS. Fails when
+  # nix/package.nix's vendorHash no longer matches go.sum.
+  nix:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - run: nix build .#vibe-rpc -L
+      - run: ./result/bin/vibe-rpc --version

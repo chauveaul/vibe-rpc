@@ -232,6 +232,11 @@ func ProcessEvent(event string, in Payload, nowMs int64, explicitSource string) 
 			}
 			if model != "" {
 				s.Model = model
+			} else if source == "claude" && s.Model == "gemini" {
+				// A session first seen mid-stream (resumed, or its state file
+				// was cleaned up) starts from DefaultState's Antigravity model,
+				// and Claude Code only reports its model at SessionStart.
+				s.Model = "claude"
 			}
 			s.Source = source
 			s.SessionID = sid

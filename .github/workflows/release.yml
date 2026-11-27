@@ -20,6 +20,16 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Check Nix package version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          nix_version=$(sed -n 's/^  version = "\(.*\)";$/\1/p' nix/package.nix)
+          if [ "$nix_version" != "${TAG#v}" ]; then
+            echo "::error::nix/package.nix has version '$nix_version' but the tag is $TAG. Bump it and re-tag."
+            exit 1
+          fi
+
       - name: Test
         run: go test ./...
 
@@ -32,12 +42,87 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Publishes Formula/vibe-rpc.rb to chauveaul/homebrew-tap over SSH using
-      # a write-enabled deploy key scoped to that repo only (private half in
-      # the HOMEBREW_TAP_DEPLOY_KEY secret). Skipped with a warning if unset,
-      # and for prereleases like v2.1.0-rc.1.
-      - name: Update Homebrew tap
+      # Publishes the vibe-rpc-bin AUR package over SSH with the key of the
+      # AUR account that maintains it (private half in the AUR_KEY secret).
+      # Skipped with a warning if unset, and for prereleases.
+      - name: Update AUR package
         if: ${{ !contains(github.ref_name, '-') }}
+        env:
+          AUR_KEY: ${{ secrets.AUR_KEY }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          if [ -z "$AUR_KEY" ]; then
+            echo "::warning::AUR_KEY is not set; skipping the AUR update."
+            exit 0
+          fi
+          eval "$(ssh-agent -s)"
+          trap 'ssh-agent -k >/dev/null' EXIT
+          printf '%s\n' "$AUR_KEY" | ssh-add - >/dev/null
+          # AUR host key, checked against the fingerprint on aur.archlinux.org.
+          echo "aur.archlinux.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEuBKrPzbawxA/k2g6NcyV5jmqwJ2s+zpgZGZ7tpLIcN" > "$RUNNER_TEMP/known_hosts"
+          export GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=$RUNNER_TEMP/known_hosts -o StrictHostKeyChecking=yes -o IdentitiesOnly=no"
+
+          # Cloning a package that doesn't exist yet gives an empty repo;
+          # the first push creates it on the AUR.
+          git -c init.defaultBranch=master clone ssh://aur@aur.archlinux.org/vibe-rpc-bin.git aur
+          sh scripts/aur-pkgbuild.sh "$VERSION" dist aur
+          cd aur
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add PKGBUILD .SRCINFO
+          if git diff --cached --quiet; then
+            echo "AUR package already up to date."
+            exit 0
+          fi
+          git commit -m "vibe-rpc ${VERSION#v}"
+          git push origin HEAD:master
+
+  release-notch:
+    needs: release
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build VibeNotch.app
+        env:
+          VIBE_NOTCH_VERSION: ${{ github.ref_name }}
+        run: |
+          VER="${VIBE_NOTCH_VERSION#v}"
+          ZIP="VibeNotch_${VER}_darwin_all.zip"
+          VIBE_NOTCH_VERSION="$VER" sh macos/VibeNotch/build-app.sh
+          ditto -c -k --sequesterRsrc --keepParent macos/VibeNotch/build/VibeNotch.app "$ZIP"
+          shasum -a 256 "$ZIP" > "${ZIP}.sha256"
+
+      - name: Attach VibeNotch.app to GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          ZIP="VibeNotch_${TAG#v}_darwin_all.zip"
+          gh release upload "$TAG" "$ZIP" "${ZIP}.sha256" --clobber
+
+  # Publishes Formula/vibe-rpc.rb to chauveaul/homebrew-tap over SSH using a
+  # write-enabled deploy key scoped to that repo only (private half in the
+  # HOMEBREW_TAP_DEPLOY_KEY secret). Runs after release-notch because the
+  # formula ships VibeNotch.app on macOS, so `brew upgrade` updates both.
+  # Skipped with a warning if the key is unset, and for prereleases.
+  homebrew:
+    needs: [release, release-notch]
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download release checksums
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          V="${TAG#v}"
+          gh release download "$TAG" -D dist \
+            -p "vibe-rpc_${V}_checksums.txt" -p "VibeNotch_${V}_darwin_all.zip.sha256"
+
+      - name: Update Homebrew tap
         env:
           DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
           VERSION: ${{ github.ref_name }}
@@ -66,27 +151,3 @@ jobs:
           fi
           git commit -m "vibe-rpc ${VERSION#v}"
           git push origin HEAD:main
-
-  release-notch:
-    needs: release
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build VibeNotch.app
-        env:
-          VIBE_NOTCH_VERSION: ${{ github.ref_name }}
-        run: |
-          VER="${VIBE_NOTCH_VERSION#v}"
-          ZIP="VibeNotch_${VER}_darwin_all.zip"
-          VIBE_NOTCH_VERSION="$VER" sh macos/VibeNotch/build-app.sh
-          ditto -c -k --sequesterRsrc --keepParent macos/VibeNotch/build/VibeNotch.app "$ZIP"
-          shasum -a 256 "$ZIP" > "${ZIP}.sha256"
-
-      - name: Attach VibeNotch.app to GitHub release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
-        run: |
-          ZIP="VibeNotch_${TAG#v}_darwin_all.zip"
-          gh release upload "$TAG" "$ZIP" "${ZIP}.sha256" --clobber

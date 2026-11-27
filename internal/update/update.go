@@ -327,7 +327,9 @@ func ManagedBy(exe string) string {
 	case strings.Contains(p, "/Cellar/") || strings.Contains(p, "/homebrew/") || strings.Contains(p, "/linuxbrew/"):
 		return "Homebrew (run: brew upgrade vibe-rpc)"
 	case strings.Contains(p, "/nix/store/"):
-		return "Nix"
+		return "Nix (run: nix profile upgrade vibe-rpc, or update your flake inputs)"
+	case strings.HasPrefix(p, "/usr/bin/"):
+		return "the system package manager (on Arch, update vibe-rpc-bin with your AUR helper)"
 	case strings.Contains(strings.ToLower(p), "/scoop/apps/"):
 		return "Scoop (run: scoop update vibe-rpc)"
 	}

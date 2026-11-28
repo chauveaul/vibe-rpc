@@ -22,6 +22,11 @@ func TestBuildNotchFeedShape(t *testing.T) {
 	t.Setenv("VIBE_RPC_STATE_DIR", filepath.Join(tmp, "state"))
 	t.Setenv("VIBE_RPC_DATA_DIR", filepath.Join(tmp, "data"))
 	t.Setenv("CLAUDE_RPC_STATE_DIR", filepath.Join(tmp, "none"))
+	// Keep the machine's real Claude usage (~/.claude.json, status line
+	// cache) out of the feed, or a live limit reset breaks "limitResets":[].
+	t.Setenv("HOME", tmp)
+	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(tmp, ".claude"))
+	t.Setenv("VIBE_RPC_CLAUDE_CONFIG", filepath.Join(tmp, ".claude.json"))
 
 	f := BuildNotchFeed()
 	if f.Running == nil {

@@ -53,8 +53,9 @@ type NotchFeed struct {
 	Running []notchSession `json:"running"`
 	Usage   notchUsage     `json:"usage"`
 	// Sessions waiting on a permission prompt or a question, newest first.
-	Attention []notchAttention `json:"attention"`
-	Finished  []notchFinished  `json:"finished"`
+	Attention   []notchAttention  `json:"attention"`
+	Finished    []notchFinished   `json:"finished"`
+	LimitResets []notchLimitReset `json:"limitResets"`
 }
 
 type notchAttention struct {
@@ -78,6 +79,18 @@ type notchFinished struct {
 	TurnMs     int64  `json:"turnMs"` // 0 when the prompt time is unknown
 	HostApp    string `json:"hostApp,omitempty"`
 	HostAppPID int32  `json:"hostAppPid,omitempty"`
+}
+
+// notchLimitReset is a usage-limit window that reset after non-zero usage, for
+// VibeNotch's short "limit reset" banner. The ID is unique per window and reset
+// timestamp so the app shows it once — including after waking from sleep.
+type notchLimitReset struct {
+	ID      string `json:"id"`             // e.g. "claude-5h:1700000000"
+	Source  string `json:"source"`         // "claude" | "antigravity"
+	Pool    string `json:"pool,omitempty"` // "" for claude; "gemini" | "3p" for antigravity
+	Window  string `json:"window"`         // "5h" | "7d"
+	ResetAt int64  `json:"resetAt"`        // unix ms
+	PrevPct int    `json:"prevPct"`        // rounded usage % before the reset
 }
 
 // notchUsage drives the usage bars. Both Claude Code and Antigravity CLI
@@ -201,12 +214,13 @@ func BuildNotchFeed() NotchFeed {
 		f.GifURL = img
 	}
 
+	now := time.Now()
 	f.Enabled = cfg.Notch.Enabled
 	f.Today = notchTodayFrom(agg, cfg.Goals.DailyHours, format.BuildVars(st, cfg, agg))
-	f.Attention = listAttention(cfg, time.Now())
+	f.Attention = listAttention(cfg, now)
 	f.Finished = []notchFinished{}
 	if cfg.Notch.WantsFinishAlerts() {
-		f.Finished = listFinished(cfg, time.Now())
+		f.Finished = listFinished(cfg, now)
 	}
 	agyModel := ""
 	if st.AgySession != nil && st.AgySession.Model != "" {
@@ -214,11 +228,17 @@ func BuildNotchFeed() NotchFeed {
 	} else if st.Source != "claude" && st.Model != "" {
 		agyModel = st.Model
 	}
+	ccLim := limits.Load()
+	agyLim := limits.LoadAntigravity()
+	f.LimitResets = []notchLimitReset{}
+	if cfg.Notch.WantsLimitResetAlerts() {
+		f.LimitResets = listLimitResets(cfg, ccLim, agyLim, now)
+	}
 	f.Usage = buildUsage(
 		agg,
-		limits.Load(), install.ClaudeStatusLineState(""),
-		limits.LoadAntigravity(), install.AgyStatusLineState(""), agyModel,
-		time.Now(),
+		ccLim, install.ClaudeStatusLineState(""),
+		agyLim, install.AgyStatusLineState(""), agyModel,
+		now,
 	)
 	for _, r := range listRunning(cfg, st.SessionID) {
 		f.Running = append(f.Running, notchSession{
@@ -308,6 +328,51 @@ func buildUsage(agg *scanner.Aggregate, ccLim *limits.Claude, ccStatusLine strin
 		}
 	}
 	return u
+}
+
+// limitResetMaxAge keeps reset events available across overnight sleep or a
+// weekend off while ignoring abandoned limit files from weeks/months ago.
+const limitResetMaxAge = 7 * 24 * time.Hour
+
+// listLimitResets reports every tracked Claude Code and Antigravity 5h/7d
+// window that reset after non-zero usage within limitResetMaxAge, newest first.
+func listLimitResets(cfg config.Config, ccLim *limits.Claude, agyLim *limits.Antigravity, now time.Time) []notchLimitReset {
+	out := []notchLimitReset{}
+	add := func(source, pool, win string, w *limits.Window) {
+		resetAtSec, prevPct, ok := w.ResetEvent(now, limitResetMaxAge)
+		if !ok {
+			return
+		}
+		key := fmt.Sprintf("claude-%s", win)
+		if source != "claude" {
+			key = fmt.Sprintf("agy-%s-%s", pool, win)
+		}
+		out = append(out, notchLimitReset{
+			ID:      fmt.Sprintf("%s:%d", key, resetAtSec),
+			Source:  source,
+			Pool:    pool,
+			Window:  win,
+			ResetAt: resetAtSec * 1000,
+			PrevPct: int(math.Round(prevPct)),
+		})
+	}
+	if cfg.Sources.WantClaude() && ccLim != nil {
+		add("claude", "", "5h", ccLim.FiveHour)
+		add("claude", "", "7d", ccLim.SevenDay)
+	}
+	if cfg.Sources.WantAntigravity() && agyLim != nil {
+		add("antigravity", "gemini", "5h", agyLim.GeminiFiveHour)
+		add("antigravity", "gemini", "7d", agyLim.GeminiSevenDay)
+		add("antigravity", "3p", "5h", agyLim.ThirdPartyFiveHour)
+		add("antigravity", "3p", "7d", agyLim.ThirdPartySevenDay)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].ResetAt != out[j].ResetAt {
+			return out[i].ResetAt > out[j].ResetAt
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out
 }
 
 // attentionMaxAge drops prompts nobody answered (e.g. the agent was closed

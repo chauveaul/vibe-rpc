@@ -29,6 +29,8 @@ struct NotchFeed: Decodable, Equatable {
     var attention: [Attention] = []
     /// Turns an agent just finished (optional so an older vibe-rpc still decodes).
     var finished: [Finished]?
+    /// Usage-limit windows that reset after non-zero usage (optional for backwards compat).
+    var limitResets: [LimitReset]?
 
     struct Attention: Decodable, Equatable, Identifiable {
         var id: String
@@ -49,6 +51,15 @@ struct NotchFeed: Decodable, Equatable {
         var turnMs: Int64  // 0 when unknown
         var hostApp: String?
         var hostAppPid: Int32?
+    }
+
+    struct LimitReset: Decodable, Equatable, Identifiable {
+        var id: String
+        var source: String   // "claude" | "antigravity"
+        var pool: String?    // "gemini" | "3p" (antigravity only)
+        var window: String   // "5h" | "7d"
+        var resetAt: Int64   // unix ms
+        var prevPct: Int?
     }
 
     struct Usage: Decodable, Equatable {

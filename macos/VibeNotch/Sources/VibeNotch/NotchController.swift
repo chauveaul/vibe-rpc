@@ -46,10 +46,11 @@ final class FirstClickHostingView<Content: View>: NSHostingView<Content> {
 }
 
 /// A transient banner below the notch: a usage-limit warning when a 5h or
-/// weekly window crosses 90%, 95% or 100%, or a short "finished" notice when
-/// an agent ends a turn. Auto-dismisses after `lifetime` seconds or on hover.
+/// weekly window crosses 90%, 95% or 100%, a "limit reset" notice when a used
+/// window resets, or a short "finished" notice when an agent ends a turn.
+/// Auto-dismisses after `lifetime` seconds or on hover.
 struct LimitAlert: Equatable, Identifiable {
-    enum Kind: Equatable { case limit, finished }
+    enum Kind: Equatable { case limit, finished, limitReset }
 
     let id: String
     let source: String   // "claude" | "antigravity" | "opencode" | "codex"
@@ -59,7 +60,7 @@ struct LimitAlert: Equatable, Identifiable {
     let pct: Int
     let isPreview: Bool
     var kind: Kind = .limit
-    var badge: String = ""      // finished: how long the turn ran
+    var badge: String = ""      // finished: turn length; limitReset: "0%"
     var lifetime: Double = 10
 }
 
@@ -78,9 +79,26 @@ final class NotchController: ObservableObject {
     private var notifiedTiers: [String: Int] = {
         UserDefaults.standard.dictionary(forKey: "vibeNotchNotifiedLimitTiers") as? [String: Int] ?? [:]
     }()
+    /// Last notified reset timestamp (unix ms) per window key (e.g. "claude-5h").
+    private var notifiedLimitResets: [String: Int64] = {
+        let raw = UserDefaults.standard.dictionary(forKey: "vibeNotchNotifiedLimitResets") ?? [:]
+        var out: [String: Int64] = [:]
+        for (k, v) in raw {
+            if let n = v as? NSNumber { out[k] = n.int64Value }
+        }
+        return out
+    }()
     private var limitTimers: [String: DispatchWorkItem] = [:]
     /// Finished-turn ids already shown (or skipped), so each shows once.
     private var seenFinished: Set<String> = []
+    /// Track sleep / display sleep / screen lock so overnight or dark-wake
+    /// limit resets wait until the user wakes and unlocks their Mac.
+    private var systemAsleep = false
+    private var screensAsleep = false
+    private var screenLocked = NotchController.isScreenCurrentlyLocked()
+    private var wakeRefreshWork: DispatchWorkItem?
+    private var isUserAway: Bool { systemAsleep || screensAsleep || screenLocked }
+    private static let maxVisibleLimitAlerts = 3
 
     let feed: FeedClient
     private let panel = NotchPanel()
@@ -88,23 +106,24 @@ final class NotchController: ObservableObject {
     private var collapseWork: DispatchWorkItem?
     private var hovering = false
     private var feedObserver: AnyCancellable?
-    /// `--preview live|expanded|alert|alert2|limit90|limit95|limit100` pins a shape.
-    private let pinned: NotchMode? = {
+    private static let previewArg: String? = {
         let a = CommandLine.arguments
         guard let i = a.firstIndex(of: "--preview"), i + 1 < a.count else { return nil }
-        switch a[i + 1] {
+        return a[i + 1]
+    }()
+    /// `--preview live|expanded|alert|alert2|limit90|limit95|limit100|finished|reset` pins a shape.
+    private let pinned: NotchMode? = {
+        switch NotchController.previewArg {
         case "live": return .live
         case "expanded": return .expanded
         case "alert": return .alert(1)
         case "alert2": return .alert(2)
-        case "limit", "limit90", "limit95", "limit100", "finished": return .limitAlert(1)
+        case "limit", "limit90", "limit95", "limit100", "finished", "reset", "limitReset": return .limitAlert(1)
         default: return nil
         }
     }()
     private let previewLimitThreshold: Int? = {
-        let a = CommandLine.arguments
-        guard let i = a.firstIndex(of: "--preview"), i + 1 < a.count else { return nil }
-        switch a[i + 1] {
+        switch NotchController.previewArg {
         case "limit90": return 90
         case "limit", "limit95": return 95
         case "limit100": return 100
@@ -117,9 +136,13 @@ final class NotchController: ObservableObject {
     }
 
     func start() {
-        if CommandLine.arguments.contains("finished") && pinned != nil {
+        if Self.previewArg == "finished" && pinned != nil {
             limitAlerts = [Self.finishedAlert(id: "preview-finished", source: "claude", project: "vibe-rpc",
                                               turnMs: 134_000, isPreview: true)]
+        }
+        if (Self.previewArg == "reset" || Self.previewArg == "limitReset") && pinned != nil {
+            limitAlerts = [Self.limitResetAlert(id: "preview-reset", source: "claude", pool: nil,
+                                                window: "5h", resetAtMs: 0, isPreview: true)]
         }
         if let t = previewLimitThreshold {
             limitAlerts = [LimitAlert(
@@ -158,6 +181,46 @@ final class NotchController: ObservableObject {
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.refreshResting() }
         }
+        // Hold limit-reset banners while asleep or locked so overnight resets
+        // appear right after the user wakes and unlocks their Mac.
+        let ws = NSWorkspace.shared.notificationCenter
+        ws.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.systemAsleep = true
+                self?.wakeRefreshWork?.cancel()
+            }
+        }
+        ws.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.systemAsleep = false
+                self?.scheduleWakeRefresh()
+            }
+        }
+        ws.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.screensAsleep = true
+                self?.wakeRefreshWork?.cancel()
+            }
+        }
+        ws.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.screensAsleep = false
+                self?.scheduleWakeRefresh()
+            }
+        }
+        let dnc = DistributedNotificationCenter.default()
+        dnc.addObserver(forName: Notification.Name("com.apple.screenIsLocked"), object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.screenLocked = true
+                self?.wakeRefreshWork?.cancel()
+            }
+        }
+        dnc.addObserver(forName: Notification.Name("com.apple.screenIsUnlocked"), object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.screenLocked = false
+                self?.scheduleWakeRefresh()
+            }
+        }
         feedObserver = feed.$feed.sink { [weak self] f in
             Task { @MainActor in
                 guard let self else { return }
@@ -194,9 +257,29 @@ final class NotchController: ObservableObject {
     private func refreshResting() {
         updateAlerts()
         checkUsageLimits()
+        checkLimitResets()
         checkFinished()
         if let pinned { setMode(pinned); return }
         if mode != .expanded { setMode(restingMode) }
+    }
+
+    private func scheduleWakeRefresh() {
+        wakeRefreshWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.wakeRefreshWork = nil
+                self.screenLocked = Self.isScreenCurrentlyLocked()
+                self.refreshResting()
+            }
+        }
+        wakeRefreshWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: work)
+    }
+
+    private static func isScreenCurrentlyLocked() -> Bool {
+        guard let dict = CGSessionCopyCurrentDictionary() as? [String: Any] else { return false }
+        return (dict["CGSSessionScreenIsLocked"] as? Bool) ?? false
     }
 
     /// Checks Claude Code and Antigravity 5h/7d windows for 90%, 95%, and 100%
@@ -288,16 +371,138 @@ final class NotchController: ObservableObject {
                 limitAlerts.removeAll { $0.id.hasPrefix(prefix) }
                 limitAlerts.insert(item, at: 0)
             }
-            if limitAlerts.count > 2 {
-                for dropped in limitAlerts.dropFirst(2) {
+            if limitAlerts.count > Self.maxVisibleLimitAlerts {
+                for dropped in limitAlerts.dropFirst(Self.maxVisibleLimitAlerts) {
                     limitTimers.removeValue(forKey: dropped.id)?.cancel()
                 }
-                limitAlerts = Array(limitAlerts.prefix(2))
+                limitAlerts = Array(limitAlerts.prefix(Self.maxVisibleLimitAlerts))
             }
         }
         for item in newlyAdded {
             scheduleLimitDismiss(id: item.id)
         }
+    }
+
+    /// Shows a short banner when a 5-hour or weekly usage limit resets after
+    /// non-zero usage, once per reset cycle. Waits while the Mac is asleep or
+    /// locked so overnight resets appear when the user wakes and unlocks.
+    private func checkLimitResets() {
+        guard pinned == nil, !isUserAway, let list = feed.feed?.limitResets, !list.isEmpty else { return }
+        var changedStore = false
+        var added: [(windowKey: String, alert: LimitAlert)] = []
+
+        // Count how many banners will remain after any active warnings for
+        // resetting windows are cleared, so overflow resets wait for a free
+        // slot instead of being dropped and marked seen.
+        var slotsAvailable = max(0, Self.maxVisibleLimitAlerts - limitAlerts.count)
+
+        for r in list {
+            let windowKey = Self.limitWindowKey(source: r.source, pool: r.pool, window: r.window)
+            let prevResetAt = notifiedLimitResets[windowKey] ?? 0
+            // Same cycle (allowing minor server-side timestamp drift) or older: skip.
+            if r.resetAt <= prevResetAt || abs(r.resetAt - prevResetAt) <= 120_000 {
+                continue
+            }
+            // If the user is already looking at the expanded Usage card, mark
+            // the reset seen without interrupting the open panel.
+            if mode == .expanded {
+                notifiedLimitResets[windowKey] = r.resetAt
+                changedStore = true
+                continue
+            }
+
+            let warnPrefix = "\(windowKey):"
+            let replacesWarning = limitAlerts.contains { $0.kind == .limit && $0.id.hasPrefix(warnPrefix) }
+            if !replacesWarning && slotsAvailable <= 0 {
+                continue
+            }
+            if !replacesWarning {
+                slotsAvailable -= 1
+            }
+
+            notifiedLimitResets[windowKey] = r.resetAt
+            changedStore = true
+            added.append((
+                windowKey: windowKey,
+                alert: Self.limitResetAlert(
+                    id: "reset-\(r.id)",
+                    source: r.source,
+                    pool: r.pool,
+                    window: r.window,
+                    resetAtMs: r.resetAt,
+                    isPreview: false
+                )
+            ))
+        }
+
+        if changedStore {
+            UserDefaults.standard.set(notifiedLimitResets, forKey: "vibeNotchNotifiedLimitResets")
+        }
+        guard !added.isEmpty else { return }
+
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+            for entry in added {
+                let warnPrefix = "\(entry.windowKey):"
+                for old in limitAlerts where old.kind == .limit && old.id.hasPrefix(warnPrefix) {
+                    limitTimers.removeValue(forKey: old.id)?.cancel()
+                }
+                limitAlerts.removeAll { $0.kind == .limit && $0.id.hasPrefix(warnPrefix) }
+                limitAlerts.insert(entry.alert, at: 0)
+            }
+            if limitAlerts.count > Self.maxVisibleLimitAlerts {
+                for dropped in limitAlerts.dropFirst(Self.maxVisibleLimitAlerts) {
+                    limitTimers.removeValue(forKey: dropped.id)?.cancel()
+                }
+                limitAlerts = Array(limitAlerts.prefix(Self.maxVisibleLimitAlerts))
+            }
+        }
+        for entry in added {
+            scheduleLimitDismiss(id: entry.alert.id, after: entry.alert.lifetime)
+        }
+    }
+
+    static func limitWindowKey(source: String, pool: String?, window: String) -> String {
+        if source == "claude" { return "claude-\(window)" }
+        let p = (pool?.isEmpty == false) ? pool! : "gemini"
+        return "agy-\(p)-\(window)"
+    }
+
+    static func limitResetAlert(id: String, source: String, pool: String?, window: String, resetAtMs: Int64, isPreview: Bool) -> LimitAlert {
+        let agent = source == "claude" ? "Claude" : "Antigravity"
+        let winLabel = window == "7d" ? "weekly" : "5h"
+        let subtitle = Self.limitResetSubtitle(source: source, pool: pool, window: window, resetAtMs: resetAtMs)
+        return LimitAlert(
+            id: id,
+            source: source,
+            title: "\(agent) \(winLabel) limit reset",
+            subtitle: subtitle,
+            threshold: 0,
+            pct: 0,
+            isPreview: isPreview,
+            kind: .limitReset,
+            badge: "0%",
+            lifetime: 10
+        )
+    }
+
+    private static func limitResetSubtitle(source: String, pool: String?, window: String, resetAtMs: Int64, now: Date = Date()) -> String {
+        let isWeek = window == "7d"
+        let prefix: String = {
+            if source != "claude", let pool, !pool.isEmpty {
+                let name = pool == "3p" ? "3P" : "Gemini"
+                return isWeek ? "\(name) weekly" : "\(name) pool"
+            }
+            return isWeek ? "Weekly window" : "5-hour window"
+        }()
+        guard resetAtMs > 0 else { return "\(prefix) · ready to use" }
+        let age = now.timeIntervalSince1970 - Double(resetAtMs) / 1000
+        if age < 120 {
+            return "\(prefix) · ready to use"
+        }
+        let d = Date(timeIntervalSince1970: Double(resetAtMs) / 1000)
+        let f = DateFormatter()
+        f.dateFormat = Calendar.current.isDateInToday(d) ? "HH:mm" : "EEE HH:mm"
+        return "\(prefix) · reset \(f.string(from: d))"
     }
 
     /// Shows a short banner for each turn an agent just finished, once. Skips
@@ -319,11 +524,11 @@ final class NotchController: ObservableObject {
         guard !added.isEmpty else { return }
         withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
             limitAlerts.insert(contentsOf: added, at: 0)
-            if limitAlerts.count > 2 {
-                for dropped in limitAlerts.dropFirst(2) {
+            if limitAlerts.count > Self.maxVisibleLimitAlerts {
+                for dropped in limitAlerts.dropFirst(Self.maxVisibleLimitAlerts) {
                     limitTimers.removeValue(forKey: dropped.id)?.cancel()
                 }
-                limitAlerts = Array(limitAlerts.prefix(2))
+                limitAlerts = Array(limitAlerts.prefix(Self.maxVisibleLimitAlerts))
             }
         }
         for item in added {
@@ -362,6 +567,7 @@ final class NotchController: ObservableObject {
         withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
             limitAlerts.removeAll { $0.id == id }
         }
+        checkLimitResets()
         if mode != .expanded && pinned == nil {
             setMode(restingMode)
         }

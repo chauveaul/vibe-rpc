@@ -200,3 +200,91 @@ func TestSaveFromAntigravityStatusLine(t *testing.T) {
 		t.Fatal("antigravity payload must not write claude-limits.json")
 	}
 }
+
+func TestWindowResetEventAndRollover(t *testing.T) {
+	t.Setenv("VIBE_RPC_DATA_DIR", t.TempDir())
+	t.Setenv("VIBE_RPC_CLAUDE_CONFIG", filepath.Join(t.TempDir(), "none.json"))
+
+	now := time.Date(2026, 11, 28, 9, 0, 0, 0, time.UTC)
+	maxAge := 7 * 24 * time.Hour
+
+	// Unexpired window -> no reset.
+	w := &Window{UsedPct: 80, ResetsAt: now.Add(time.Hour).Unix()}
+	if _, _, ok := w.ResetEvent(now, maxAge); ok {
+		t.Fatal("unexpired window should not report reset")
+	}
+	// Expired with 0% usage -> no reset.
+	zero := &Window{UsedPct: 0, ResetsAt: now.Add(-time.Minute).Unix()}
+	if _, _, ok := zero.ResetEvent(now, maxAge); ok {
+		t.Fatal("0% window should not report reset")
+	}
+	// Expired overnight (7h ago) with non-zero usage -> reports reset.
+	overnight := &Window{UsedPct: 65, ResetsAt: now.Add(-7 * time.Hour).Unix()}
+	if at, pct, ok := overnight.ResetEvent(now, maxAge); !ok || at != overnight.ResetsAt || pct != 65 {
+		t.Fatalf("overnight reset = %d, %.1f, %v", at, pct, ok)
+	}
+	// Expired beyond maxAge (10d ago) -> ignored.
+	ancient := &Window{UsedPct: 100, ResetsAt: now.Add(-10 * 24 * time.Hour).Unix()}
+	if _, _, ok := ancient.ResetEvent(now, maxAge); ok {
+		t.Fatal("ancient expired window should not report reset")
+	}
+
+	// Claude rollover via SaveFromStatusLine records PrevResetsAt and preserves
+	// it across subsequent ticks in the new window.
+	reset1 := now.Add(-30 * time.Second).Unix()
+	reset2 := now.Add(5 * time.Hour).Unix()
+	p1 := []byte(`{"rate_limits":{"five_hour":{"used_percentage":42,"resets_at":` + itoa(reset1) + `}}}`)
+	if ok, err := SaveFromStatusLine(p1, now.Add(-2*time.Hour)); !ok || err != nil {
+		t.Fatalf("save p1 = %v, %v", ok, err)
+	}
+	p2 := []byte(`{"rate_limits":{"five_hour":{"used_percentage":3,"resets_at":` + itoa(reset2) + `}}}`)
+	if ok, err := SaveFromStatusLine(p2, now); !ok || err != nil {
+		t.Fatalf("save p2 = %v, %v", ok, err)
+	}
+	p3 := []byte(`{"rate_limits":{"five_hour":{"used_percentage":8,"resets_at":` + itoa(reset2) + `}}}`)
+	if ok, err := SaveFromStatusLine(p3, now.Add(10*time.Second)); !ok || err != nil {
+		t.Fatalf("save p3 = %v, %v", ok, err)
+	}
+	c := Load()
+	if c == nil || c.FiveHour == nil {
+		t.Fatalf("claude limits missing: %+v", c)
+	}
+	if at, pct, ok := c.FiveHour.ResetEvent(now.Add(10*time.Second), maxAge); !ok || at != reset1 || pct != 42 {
+		t.Fatalf("claude rollover reset = %d, %.1f, %v (want %d, 42, true)", at, pct, ok, reset1)
+	}
+
+	// Antigravity rollover (including resetting to remaining_fraction=1 with no reset_time).
+	agyReset1 := now.Add(-time.Minute).UTC().Format(time.RFC3339)
+	agyReset2 := now.Add(5 * time.Hour).UTC().Format(time.RFC3339)
+	a1 := []byte(`{
+		"product": "antigravity",
+		"quota": {
+			"3p-5h": {"remaining_fraction": 0, "reset_time": "` + agyReset1 + `"},
+			"gemini-5h": {"remaining_fraction": 0.4, "reset_time": "` + agyReset1 + `"}
+		}
+	}`)
+	if ok, err := SaveFromStatusLine(a1, now.Add(-time.Hour)); !ok || err != nil {
+		t.Fatalf("save a1 = %v, %v", ok, err)
+	}
+	a2 := []byte(`{
+		"product": "antigravity",
+		"quota": {
+			"3p-5h": {"remaining_fraction": 1.0},
+			"gemini-5h": {"remaining_fraction": 0.95, "reset_time": "` + agyReset2 + `"}
+		}
+	}`)
+	if ok, err := SaveFromStatusLine(a2, now); !ok || err != nil {
+		t.Fatalf("save a2 = %v, %v", ok, err)
+	}
+	agy := LoadAntigravity()
+	if agy == nil || agy.ThirdPartyFiveHour == nil || agy.GeminiFiveHour == nil {
+		t.Fatalf("agy limits = %+v", agy)
+	}
+	wantAgyReset := now.Add(-time.Minute).Unix()
+	if at, pct, ok := agy.ThirdPartyFiveHour.ResetEvent(now, maxAge); !ok || at != wantAgyReset || pct != 100 {
+		t.Fatalf("agy 3p reset = %d, %.1f, %v", at, pct, ok)
+	}
+	if at, pct, ok := agy.GeminiFiveHour.ResetEvent(now, maxAge); !ok || at != wantAgyReset || math.Abs(pct-60) > 0.01 {
+		t.Fatalf("agy gemini reset = %d, %.1f, %v", at, pct, ok)
+	}
+}

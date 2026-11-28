@@ -1344,6 +1344,8 @@ func parseSettingsForm(r *http.Request, base config.Config) (config.Config, stri
 		edited.Notch.Enabled = r.FormValue("notchEnabled") == "on"
 		finish := r.FormValue("notchFinishAlerts") == "on"
 		edited.Notch.FinishAlerts = &finish
+		limitReset := r.FormValue("notchLimitResetAlerts") == "on"
+		edited.Notch.LimitResetAlerts = &limitReset
 	}
 
 	return edited, selStatus

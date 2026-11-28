@@ -27,13 +27,37 @@ import (
 )
 
 type Window struct {
-	UsedPct  float64 `json:"usedPct"`
-	ResetsAt int64   `json:"resetsAt"` // unix seconds
+	UsedPct      float64 `json:"usedPct"`
+	ResetsAt     int64   `json:"resetsAt"`               // unix seconds
+	PrevResetsAt int64   `json:"prevResetsAt,omitempty"` // unix seconds of previous non-zero window on rollover
+	PrevUsedPct  float64 `json:"prevUsedPct,omitempty"`  // usedPct before that rollover
 }
 
 // Expired reports whether the window has already reset.
 func (w *Window) Expired(now time.Time) bool {
 	return w == nil || (w.ResetsAt > 0 && now.Unix() >= w.ResetsAt)
+}
+
+// ResetEvent reports whether this window reset within the last maxAge after
+// non-zero usage — either because ResetsAt has passed or because a rollover
+// was recorded in PrevResetsAt. Returns the reset unix timestamp (seconds)
+// and the usage percentage prior to the reset.
+func (w *Window) ResetEvent(now time.Time, maxAge time.Duration) (int64, float64, bool) {
+	if w == nil {
+		return 0, 0, false
+	}
+	maxSec := int64(maxAge.Seconds())
+	if maxSec <= 0 {
+		maxSec = 120
+	}
+	nowSec := now.Unix()
+	if w.UsedPct > 0 && w.ResetsAt > 0 && nowSec >= w.ResetsAt && nowSec-w.ResetsAt <= maxSec {
+		return w.ResetsAt, w.UsedPct, true
+	}
+	if w.PrevUsedPct > 0 && w.PrevResetsAt > 0 && nowSec >= w.PrevResetsAt-sameWindowSlackSec && nowSec-w.PrevResetsAt <= maxSec {
+		return w.PrevResetsAt, w.PrevUsedPct, true
+	}
+	return 0, 0, false
 }
 
 type Claude struct {
@@ -181,7 +205,7 @@ func SaveFromStatusLine(payload []byte, now time.Time) (bool, error) {
 		return false, nil
 	}
 	if len(in.Quota) > 0 {
-		a := Antigravity{
+		incoming := &Antigravity{
 			GeminiFiveHour:     in.Quota["gemini-5h"].toWindow(now),
 			GeminiSevenDay:     in.Quota["gemini-weekly"].toWindow(now),
 			ThirdPartyFiveHour: in.Quota["3p-5h"].toWindow(now),
@@ -190,11 +214,12 @@ func SaveFromStatusLine(payload []byte, now time.Time) (bool, error) {
 			ActivePool:         PoolForModel(extractModelString(in.Model)),
 			UpdatedAt:          now.UnixMilli(),
 		}
-		if a.GeminiFiveHour == nil && a.GeminiSevenDay == nil &&
-			a.ThirdPartyFiveHour == nil && a.ThirdPartySevenDay == nil {
+		if incoming.GeminiFiveHour == nil && incoming.GeminiSevenDay == nil &&
+			incoming.ThirdPartyFiveHour == nil && incoming.ThirdPartySevenDay == nil {
 			return false, nil
 		}
-		b, err := json.Marshal(a)
+		merged := mergeAntigravity(LoadAntigravity(), incoming, now)
+		b, err := json.Marshal(merged)
 		if err != nil {
 			return false, err
 		}
@@ -252,10 +277,87 @@ func cloneClaude(c *Claude) *Claude {
 	}
 }
 
+func recordRollover(prev, next *Window) *Window {
+	out := cloneWindow(next)
+	if out == nil {
+		return nil
+	}
+	if prev != nil && prev.UsedPct > 0 && prev.ResetsAt > 0 {
+		out.PrevResetsAt = prev.ResetsAt
+		out.PrevUsedPct = prev.UsedPct
+	} else if prev != nil && prev.PrevResetsAt > out.PrevResetsAt {
+		out.PrevResetsAt = prev.PrevResetsAt
+		out.PrevUsedPct = prev.PrevUsedPct
+	}
+	return out
+}
+
+func preservePrevReset(picked, other *Window) *Window {
+	out := cloneWindow(picked)
+	if out == nil || other == nil {
+		return out
+	}
+	if other.PrevResetsAt > out.PrevResetsAt {
+		out.PrevResetsAt = other.PrevResetsAt
+		out.PrevUsedPct = other.PrevUsedPct
+	}
+	return out
+}
+
+func mergeAgyWindow(prev, next *Window, now time.Time) *Window {
+	if next == nil {
+		return cloneWindow(prev)
+	}
+	if prev == nil {
+		return cloneWindow(next)
+	}
+	prevExp := prev.Expired(now)
+	nextExp := next.Expired(now)
+	if (prevExp && !nextExp) ||
+		(prev.ResetsAt > 0 && next.ResetsAt > prev.ResetsAt+sameWindowSlackSec) ||
+		(prev.ResetsAt > 0 && next.ResetsAt == 0 && next.UsedPct == 0 && now.Unix() >= prev.ResetsAt-sameWindowSlackSec) {
+		return recordRollover(prev, next)
+	}
+	if nextExp && !prevExp {
+		return cloneWindow(prev)
+	}
+	if prev.ResetsAt > 0 && next.ResetsAt > 0 && prev.ResetsAt > next.ResetsAt+sameWindowSlackSec {
+		return cloneWindow(prev)
+	}
+	return preservePrevReset(next, prev)
+}
+
+func mergeAntigravity(prev, incoming *Antigravity, now time.Time) *Antigravity {
+	if incoming == nil {
+		return prev
+	}
+	if prev == nil {
+		return incoming
+	}
+	planTier := incoming.PlanTier
+	if planTier == "" {
+		planTier = prev.PlanTier
+	}
+	activePool := incoming.ActivePool
+	if activePool == "" {
+		activePool = prev.ActivePool
+	}
+	return &Antigravity{
+		GeminiFiveHour:     mergeAgyWindow(prev.GeminiFiveHour, incoming.GeminiFiveHour, now),
+		GeminiSevenDay:     mergeAgyWindow(prev.GeminiSevenDay, incoming.GeminiSevenDay, now),
+		ThirdPartyFiveHour: mergeAgyWindow(prev.ThirdPartyFiveHour, incoming.ThirdPartyFiveHour, now),
+		ThirdPartySevenDay: mergeAgyWindow(prev.ThirdPartySevenDay, incoming.ThirdPartySevenDay, now),
+		PlanTier:           planTier,
+		ActivePool:         activePool,
+		UpdatedAt:          incoming.UpdatedAt,
+	}
+}
+
 // pickWindow chooses the fresher observation for a rate-limit window, returning
 // whether b was chosen over a. Within the same unexpired reset window, usage
 // cannot decrease, so a stale refresh tick from an idle session never regresses
-// a higher reading.
+// a higher reading. When b rolls over to a new window, the previous window's
+// reset timestamp and usage are recorded in PrevResetsAt/PrevUsedPct.
 func pickWindow(a, b *Window, aAt, bAt int64, now time.Time) (*Window, bool) {
 	if b == nil {
 		return cloneWindow(a), false
@@ -266,33 +368,36 @@ func pickWindow(a, b *Window, aAt, bAt int64, now time.Time) (*Window, bool) {
 	aExp := a.Expired(now)
 	bExp := b.Expired(now)
 	if aExp && !bExp {
-		return cloneWindow(b), true
+		return recordRollover(a, b), true
 	}
 	if bExp && !aExp {
 		return cloneWindow(a), false
 	}
 	if a.ResetsAt > 0 && b.ResetsAt > 0 {
 		if b.ResetsAt > a.ResetsAt+sameWindowSlackSec {
-			return cloneWindow(b), true
+			return recordRollover(a, b), true
 		}
 		if a.ResetsAt > b.ResetsAt+sameWindowSlackSec {
 			return cloneWindow(a), false
 		}
 		if b.UsedPct > a.UsedPct {
-			return cloneWindow(b), true
+			return preservePrevReset(b, a), true
 		}
 		if a.UsedPct > b.UsedPct {
-			return cloneWindow(a), false
+			return preservePrevReset(a, b), false
 		}
 		if bAt >= aAt {
-			return cloneWindow(b), true
+			return preservePrevReset(b, a), true
 		}
-		return cloneWindow(a), false
+		return preservePrevReset(a, b), false
+	}
+	if a.ResetsAt > 0 && b.ResetsAt == 0 && b.UsedPct == 0 && a.UsedPct > 0 && now.Unix() >= a.ResetsAt-sameWindowSlackSec {
+		return recordRollover(a, b), true
 	}
 	if bAt >= aAt {
-		return cloneWindow(b), true
+		return preservePrevReset(b, a), true
 	}
-	return cloneWindow(a), false
+	return preservePrevReset(a, b), false
 }
 
 // mergeClaude merges two Claude rate-limit snapshots, preferring newer reset
@@ -381,14 +486,21 @@ func loadClaudeConfigCache() *Claude {
 	size := fi.Size()
 
 	claudeConfigCache.mu.Lock()
-	if claudeConfigCache.path == p && claudeConfigCache.modNano == modNano && claudeConfigCache.size == size {
-		cached := cloneClaude(claudeConfigCache.limits)
-		claudeConfigCache.mu.Unlock()
-		return cached
+	var prevCached *Claude
+	if claudeConfigCache.path == p {
+		if claudeConfigCache.modNano == modNano && claudeConfigCache.size == size {
+			cached := cloneClaude(claudeConfigCache.limits)
+			claudeConfigCache.mu.Unlock()
+			return cached
+		}
+		prevCached = cloneClaude(claudeConfigCache.limits)
 	}
 	claudeConfigCache.mu.Unlock()
 
 	parsed := parseClaudeConfigFile(p, fi.ModTime().UnixMilli())
+	if prevCached != nil && parsed != nil {
+		parsed, _ = mergeClaude(prevCached, parsed, time.Now())
+	}
 
 	claudeConfigCache.mu.Lock()
 	claudeConfigCache.path = p

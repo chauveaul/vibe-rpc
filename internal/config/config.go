@@ -146,10 +146,18 @@ type NotchConfig struct {
 	// FinishAlerts shows a short banner when an agent finishes a turn.
 	// Unset means on.
 	FinishAlerts *bool `json:"finishAlerts,omitempty"`
+	// LimitResetAlerts shows a short banner when a 5-hour or weekly usage
+	// limit resets after non-zero usage. Unset means on.
+	LimitResetAlerts *bool `json:"limitResetAlerts,omitempty"`
 }
 
 // WantsFinishAlerts reports whether the "finished" banner is on (default on).
 func (n NotchConfig) WantsFinishAlerts() bool { return n.FinishAlerts == nil || *n.FinishAlerts }
+
+// WantsLimitResetAlerts reports whether limit-reset banners are on (default on).
+func (n NotchConfig) WantsLimitResetAlerts() bool {
+	return n.LimitResetAlerts == nil || *n.LimitResetAlerts
+}
 
 type PrivacyConfig struct {
 	Patterns                []string `json:"patterns,omitempty"`

@@ -36,7 +36,7 @@ func TestBuildNotchFeedShape(t *testing.T) {
 		}
 	}
 	b, _ := json.Marshal(f)
-	for _, key := range []string{`"status"`, `"active"`, `"today"`, `"running":[]`, `"paused"`} {
+	for _, key := range []string{`"status"`, `"active"`, `"today"`, `"running":[]`, `"limitResets":[]`, `"paused"`} {
 		if !strings.Contains(string(b), key) {
 			t.Fatalf("feed JSON missing %s: %s", key, b)
 		}
@@ -165,6 +165,18 @@ func TestSettingsNotchToggle(t *testing.T) {
 	if config.Load().Notch.WantsFinishAlerts() {
 		t.Fatal("finish banner should be off after saving it unchecked")
 	}
+
+	// The "limit reset" banner checkbox saves both ways.
+	form.Set("notchLimitResetAlerts", "on")
+	postSettings(t, h, "/settings/save", form)
+	if !config.Load().Notch.WantsLimitResetAlerts() {
+		t.Fatal("limit reset banner should be on after saving it checked")
+	}
+	form.Del("notchLimitResetAlerts")
+	postSettings(t, h, "/settings/save", form)
+	if config.Load().Notch.WantsLimitResetAlerts() {
+		t.Fatal("limit reset banner should be off after saving it unchecked")
+	}
 }
 
 func TestListAttention(t *testing.T) {
@@ -230,5 +242,56 @@ func TestListFinished(t *testing.T) {
 	}
 	if !config.Default().Notch.WantsFinishAlerts() {
 		t.Fatal("finish banner should default to on")
+	}
+}
+
+func TestListLimitResets(t *testing.T) {
+	now := time.Date(2026, 11, 28, 9, 0, 0, 0, time.UTC)
+	ccLim := &limits.Claude{
+		FiveHour: &limits.Window{UsedPct: 80, ResetsAt: now.Add(-5 * time.Second).Unix()},
+		SevenDay: &limits.Window{UsedPct: 45, ResetsAt: now.Add(-8 * time.Hour).Unix()}, // overnight
+	}
+	agyLim := &limits.Antigravity{
+		GeminiFiveHour: &limits.Window{UsedPct: 0, ResetsAt: now.Add(-time.Minute).Unix()},          // 0% -> ignored
+		GeminiSevenDay: &limits.Window{UsedPct: 50, ResetsAt: now.Add(-10 * 24 * time.Hour).Unix()}, // >7d -> ignored
+		ThirdPartyFiveHour: &limits.Window{
+			UsedPct:      4,
+			ResetsAt:     now.Add(5 * time.Hour).Unix(),
+			PrevResetsAt: now.Add(-2 * time.Minute).Unix(),
+			PrevUsedPct:  100,
+		}, // rolled over
+		ThirdPartySevenDay: &limits.Window{UsedPct: 20, ResetsAt: now.Add(24 * time.Hour).Unix()}, // active -> ignored
+	}
+
+	got := listLimitResets(config.Default(), ccLim, agyLim, now)
+	if len(got) != 3 {
+		t.Fatalf("limitResets len = %d, want 3: %+v", len(got), got)
+	}
+	// Sorted newest ResetAt first: claude-5h (-5s), agy-3p-5h (-2m), claude-7d (-8h).
+	if got[0].Source != "claude" || got[0].Window != "5h" || got[0].PrevPct != 80 {
+		t.Fatalf("got[0] = %+v", got[0])
+	}
+	if got[1].Source != "antigravity" || got[1].Pool != "3p" || got[1].Window != "5h" || got[1].PrevPct != 100 {
+		t.Fatalf("got[1] = %+v", got[1])
+	}
+	if got[2].Source != "claude" || got[2].Window != "7d" || got[2].PrevPct != 45 {
+		t.Fatalf("got[2] = %+v", got[2])
+	}
+
+	// Untracked sources are omitted.
+	cfg := config.Default()
+	cfg.Sources.Claude = config.BoolPtr(false)
+	onlyAgy := listLimitResets(cfg, ccLim, agyLim, now)
+	if len(onlyAgy) != 1 || onlyAgy[0].Source != "antigravity" {
+		t.Fatalf("expected only antigravity resets, got %+v", onlyAgy)
+	}
+
+	// Config default and opt-out.
+	if !config.Default().Notch.WantsLimitResetAlerts() {
+		t.Fatal("limit reset banner should default to on")
+	}
+	cfg.Notch.LimitResetAlerts = config.BoolPtr(false)
+	if cfg.Notch.WantsLimitResetAlerts() {
+		t.Fatal("LimitResetAlerts=false should turn the banner off")
 	}
 }

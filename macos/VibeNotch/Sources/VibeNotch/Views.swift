@@ -671,7 +671,12 @@ struct LimitAlertRow: View {
     @State private var remaining: CGFloat = 1
 
     var body: some View {
-        let accent = alert.kind == .finished ? Palette.green : Palette.limitColor(alert.threshold)
+        let accent: Color = {
+            switch alert.kind {
+            case .finished, .limitReset: return Palette.green
+            case .limit: return Palette.limitColor(alert.threshold)
+            }
+        }()
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 AgentLogo(source: alert.source)
@@ -699,8 +704,11 @@ struct LimitAlertRow: View {
                     if alert.kind == .finished {
                         Image(systemName: "checkmark")
                             .font(.system(size: 9, weight: .heavy))
+                    } else if alert.kind == .limitReset {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 9, weight: .heavy))
                     }
-                    Text(alert.kind == .finished ? alert.badge : "\(alert.pct)%")
+                    Text(alert.kind == .limit ? "\(alert.pct)%" : alert.badge)
                 }
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
                     .monospacedDigit()

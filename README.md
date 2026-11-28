@@ -173,7 +173,7 @@ When an agent asks for permission or asks you a question, the panel drops down w
 
 <p align="center"><img src="./assets/screenshots/notch-alerts.png" width="458" alt="VibeNotch alerts: Codex and Claude Code each waiting for permission in the vibe-rpc project"></p>
 
-It also warns you when a plan limit reaches 90 %, 95 % and 100 %:
+It also warns you when a plan limit reaches 90 %, 95 % and 100 %, and notifies you when a 5-hour or weekly limit resets (including resets that happened while your Mac was asleep or off, shown when you wake it). You can turn limit-reset banners off in Settings:
 
 <p align="center"><img src="./assets/screenshots/notch-limit.png" width="438" alt="VibeNotch alert: Antigravity 5-hour limit at 95 percent, with the reset time"></p>
 

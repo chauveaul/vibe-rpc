@@ -1220,6 +1220,7 @@ func saveTrackedAgents(tracked map[string]bool) error {
 		Antigravity: config.BoolPtr(tracked["antigravity"]),
 		Claude:      config.BoolPtr(tracked["claude"]),
 		OpenCode:    config.BoolPtr(tracked["opencode"]),
+		Codex:       config.BoolPtr(tracked["codex"]),
 	}
 	_, err := config.SaveDiff(paths.ConfigPath(), base, edited)
 	return err

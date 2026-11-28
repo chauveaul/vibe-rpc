@@ -147,9 +147,28 @@ func sdBraces(px, py, cx, cy, scale float64) float64 {
 	return math.Min(brace(1), brace(-1))
 }
 
+// Signed distance to an outlined paper plane (Copilot emblem; original art,
+// not GitHub's mark). tilt rotates it (radians) around its center.
+func sdPaperPlane(px, py, cx, cy, scale, tilt float64) float64 {
+	sin, cos := math.Sincos(-tilt)
+	dx, dy := px-cx, py-cy
+	px, py = cx+dx*cos-dy*sin, cy+dx*sin+dy*cos
+	pt := func(x, y float64) (float64, float64) { return cx + x*scale, cy + y*scale }
+	noseX, noseY := pt(44, -34)
+	wingX, wingY := pt(-44, -4)
+	foldX, foldY := pt(-6, 6)
+	tailX, tailY := pt(4, 40)
+	d := sdSegment(px, py, noseX, noseY, wingX, wingY)
+	d = math.Min(d, sdSegment(px, py, wingX, wingY, foldX, foldY))
+	d = math.Min(d, sdSegment(px, py, foldX, foldY, noseX, noseY))
+	d = math.Min(d, sdSegment(px, py, foldX, foldY, tailX, tailY))
+	d = math.Min(d, sdSegment(px, py, tailX, tailY, noseX, noseY))
+	return d - 6.5*scale
+}
+
 type themeSpec struct {
 	name      string
-	kind      string // "antigravity", "claude", "dual", "opencode", "codex"
+	kind      string // "antigravity", "claude", "dual", "opencode", "codex", "copilot"
 	bgTop     rgb
 	bgBot     rgb
 	accentA   rgb
@@ -492,6 +511,25 @@ func renderFrame(spec themeSpec, frame int, pal color.Palette) *image.Paletted {
 					col = addGlow(col, lerpColor(baseG, rgb{246, 243, 255}, sheen), cov)
 				}
 
+			case "copilot":
+				tilt := math.Sin(theta) * 0.09
+				if spec.mode == "idle" || spec.mode == "stale" {
+					tilt = math.Sin(theta) * 0.03
+				}
+				dPl := sdPaperPlane(fx, fy, cx, ay, 1.0, tilt)
+				if dPl > 0 && dPl < 22 {
+					glowA := math.Exp(-(dPl*dPl)/(2*9*9)) * 0.50
+					gradT := math.Max(0, math.Min(1, (fx-(cx-50))/100.0))
+					col = screenGlow(col, lerpColor(spec.accentA, spec.accentB, gradT), glowA)
+				}
+				if dPl < 1.5 {
+					cov := 1.0 - smoothstep(-1.2, 1.2, dPl)
+					gradY := math.Max(0, math.Min(1, (fy-(ay-40))/90.0))
+					baseG := lerpColor(spec.accentB, spec.accentA, gradY)
+					sheen := math.Max(0, 1.0-gradY*1.6) * 0.45
+					col = addGlow(col, lerpColor(baseG, rgb{240, 246, 255}, sheen), cov)
+				}
+
 			case "opencode":
 				// Cursor blinks: on for the first half of the loop (always on when idle/away).
 				cursorOn := frame < frameCount/2 || spec.mode == "idle" || spec.mode == "stale"
@@ -689,6 +727,43 @@ func main() {
 			name: "codex-stale.gif", kind: "codex", mode: "stale", delayCS: 15, bobAmp: 2.0, orbitSpd: 1.0, starAlpha: 0.45,
 			bgTop: rgb{17, 17, 22}, bgBot: rgb{11, 11, 15},
 			accentA: rgb{85, 80, 110}, accentB: rgb{120, 115, 145}, badge: rgb{71, 85, 105},
+		},
+
+		// Copilot GIFs (blue paper plane)
+		{
+			name: "copilot-working.gif", kind: "copilot", mode: "working", delayCS: 9, bobAmp: 6.0, orbitSpd: 1.0, starAlpha: 0.75,
+			bgTop: rgb{14, 22, 38}, bgBot: rgb{10, 12, 19},
+			accentA: rgb{59, 130, 246}, accentB: rgb{147, 197, 253}, badge: rgb{52, 168, 83},
+		},
+		{
+			name: "copilot-thinking.gif", kind: "copilot", mode: "thinking", delayCS: 10, bobAmp: 7.5, orbitSpd: 1.0, starAlpha: 0.85,
+			bgTop: rgb{16, 20, 40}, bgBot: rgb{10, 12, 20},
+			accentA: rgb{99, 102, 241}, accentB: rgb{125, 211, 252}, badge: rgb{147, 197, 253},
+		},
+		{
+			name: "copilot-compacting.gif", kind: "copilot", mode: "compacting", delayCS: 9, bobAmp: 4.5, orbitSpd: 1.0, starAlpha: 0.65,
+			bgTop: rgb{15, 21, 34}, bgBot: rgb{10, 12, 18},
+			accentA: rgb{70, 110, 200}, accentB: rgb{130, 170, 240}, badge: rgb{125, 211, 252},
+		},
+		{
+			name: "copilot-shipped.gif", kind: "copilot", mode: "shipped", delayCS: 8, bobAmp: 8.5, orbitSpd: 1.0, starAlpha: 0.9,
+			bgTop: rgb{14, 28, 30}, bgBot: rgb{10, 14, 18},
+			accentA: rgb{52, 211, 153}, accentB: rgb{96, 165, 250}, badge: rgb{251, 188, 5},
+		},
+		{
+			name: "copilot-notification.gif", kind: "copilot", mode: "notification", delayCS: 9, bobAmp: 5.0, orbitSpd: 1.0, starAlpha: 0.65,
+			bgTop: rgb{32, 24, 18}, bgBot: rgb{15, 14, 18},
+			accentA: rgb{251, 188, 5}, accentB: rgb{249, 115, 22}, badge: rgb{251, 188, 5},
+		},
+		{
+			name: "copilot-idle.gif", kind: "copilot", mode: "idle", delayCS: 13, bobAmp: 4.5, orbitSpd: 1.0, starAlpha: 0.8,
+			bgTop: rgb{15, 19, 30}, bgBot: rgb{10, 12, 17},
+			accentA: rgb{80, 115, 175}, accentB: rgb{135, 170, 225}, badge: rgb{148, 163, 184},
+		},
+		{
+			name: "copilot-stale.gif", kind: "copilot", mode: "stale", delayCS: 15, bobAmp: 2.0, orbitSpd: 1.0, starAlpha: 0.45,
+			bgTop: rgb{16, 18, 23}, bgBot: rgb{11, 12, 15},
+			accentA: rgb{75, 90, 115}, accentB: rgb{110, 125, 150}, badge: rgb{71, 85, 105},
 		},
 
 		// OpenCode GIFs (teal terminal prompt with a blinking cursor)

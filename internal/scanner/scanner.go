@@ -1249,9 +1249,10 @@ func AggregateFrom(cache *ScanCache) *Aggregate {
 			"claude":      {},
 			"opencode":    {},
 			"codex":       {},
+			"copilot":     {},
 		},
 		CompactionsByDay: map[string]int{},
-		SourceDays:       map[string]map[string]*SourceDay{"antigravity": {}, "claude": {}, "opencode": {}, "codex": {}},
+		SourceDays:       map[string]map[string]*SourceDay{"antigravity": {}, "claude": {}, "opencode": {}, "codex": {}, "copilot": {}},
 		DualByDay:        map[string]int64{},
 		GeneratedAt:      time.Now().UnixMilli(),
 		Version:          CacheVersion,
@@ -1644,6 +1645,14 @@ func Scan(opts ScanOptions) ScanResult {
 			}
 		}
 	}
+	if cfg.Sources.WantCopilot() {
+		for _, fp := range listCopilotEvents() {
+			if !seen[fp] {
+				seen[fp] = true
+				transcripts = append(transcripts, fp)
+			}
+		}
+	}
 
 	cache := readCache()
 	cwds := state.ReadSessionCwds("")
@@ -1686,6 +1695,8 @@ func Scan(opts ScanOptions) ScanResult {
 		var sum *TranscriptSummary
 		if isCodexRollout(fp) {
 			sum, err = ParseCodexRollout(fp)
+		} else if isCopilotEvents(fp) {
+			sum, err = ParseCopilotEvents(fp)
 		} else {
 			sum, err = ParseTranscript(fp, cwds)
 		}
@@ -1820,7 +1831,7 @@ func ActiveWithin(spans [][2]int64, from, to int64) int64 {
 // SourceKey normalizes a session's source to an aggregate bucket key.
 func SourceKey(source string) string {
 	switch source {
-	case "claude", "opencode", "codex":
+	case "claude", "opencode", "codex", "copilot":
 		return source
 	}
 	return "antigravity"

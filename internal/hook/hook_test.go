@@ -238,3 +238,64 @@ func mustPayload(t *testing.T, s string) Payload {
 	}
 	return p
 }
+
+func TestCopilotEvents(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("VIBE_RPC_STATE_DIR", tmp)
+	t.Setenv("VIBE_RPC_DATA_DIR", filepath.Join(tmp, "data"))
+	t.Setenv("VIBE_RPC_NO_AUTOSTART", "1")
+	run := func(event, body string) string {
+		var out bytes.Buffer
+		RunCLI(event, "copilot", bytes.NewBufferString(body), &out)
+		return out.String()
+	}
+	run("SessionStart", `{"hook_event_name":"SessionStart","session_id":"cp1","timestamp":"2026-11-28T15:00:00.000Z","cwd":"/w/web","source":"new"}`)
+	if st := state.Read("cp1"); st.Source != "copilot" || st.Model != "copilot" {
+		t.Fatalf("start: %+v", st)
+	}
+	run("UserPromptSubmit", `{"session_id":"cp1","cwd":"/w/web","prompt":"fix it"}`)
+	// Copilot reads permissionDecision from PreToolUse output: stay a no-op.
+	if out := run("PreToolUse", `{"session_id":"cp1","cwd":"/w/web","tool_name":"bash","tool_input":{"command":"npm test","description":"Run tests"}}`); strings.TrimSpace(out) != "{}" {
+		t.Fatalf("copilot hook output = %q, want {}", out)
+	}
+	st := state.Read("cp1")
+	if st.Status != "working" || st.LastBashCommand != "npm test" || st.Messages != 1 {
+		t.Fatalf("bash: %+v", st)
+	}
+	// Tool input may arrive JSON-encoded, or as apply_patch's bare patch text.
+	run("PreToolUse", `{"session_id":"cp1","cwd":"/w/web","tool_name":"view","tool_input":"{\"path\":\"/w/web/src/app.ts\"}"}`)
+	if st := state.Read("cp1"); st.CurrentFile != "app.ts" || len(st.FilesRead) != 1 {
+		t.Fatalf("view: %+v", st)
+	}
+	run("PreToolUse", `{"session_id":"cp1","cwd":"/w/web","tool_name":"apply_patch","tool_input":"*** Begin Patch\n*** Update File: src/server.ts\n+x\n*** End Patch"}`)
+	if st := state.Read("cp1"); st.CurrentFile != "server.ts" {
+		t.Fatalf("apply_patch file = %q", st.CurrentFile)
+	}
+	run("PostToolUse", `{"session_id":"cp1","cwd":"/w/web","tool_name":"edit","tool_input":{"path":"/w/web/src/app.ts","old_str":"a","new_str":"b"}}`)
+	if st := state.Read("cp1"); len(st.FilesEdited) != 1 || st.CurrentTool != "" {
+		t.Fatalf("edit: %+v", st)
+	}
+
+	// A finished shell command isn't a reason to raise the notch.
+	run("Notification", `{"session_id":"cp1","cwd":"/w/web","message":"Shell command completed","notification_type":"shell_completion"}`)
+	if st := state.Read("cp1"); st.Status == "notification" {
+		t.Fatalf("shell completion raised an alert: %+v", st)
+	}
+	run("Notification", `{"session_id":"cp1","cwd":"/w/web","message":"Allow bash: rm -rf dist?","notification_type":"permission_prompt"}`)
+	st = state.Read("cp1")
+	if st.Status != "notification" || st.AttentionKind != "permission" || st.AttentionText != "Allow bash: rm -rf dist?" {
+		t.Fatalf("permission: %+v", st)
+	}
+	run("PreToolUse", `{"session_id":"cp1","cwd":"/w/web","tool_name":"ask_user","tool_input":{"question":"Which port?","choices":["3000","8080"]}}`)
+	if st := state.Read("cp1"); st.AttentionKind != "question" || st.AttentionText != "Which port?" {
+		t.Fatalf("ask_user: %+v", st)
+	}
+	run("Stop", `{"session_id":"cp1","cwd":"/w/web","stopReason":"end_turn"}`)
+	if st := state.Read("cp1"); st.Status != "idle" || st.LastStop == 0 {
+		t.Fatalf("stop: %+v", st)
+	}
+	run("SessionEnd", `{"session_id":"cp1","cwd":"/w/web","reason":"user_exit"}`)
+	if st := state.Read("cp1"); st.Status != "stale" || !st.AgentClosed {
+		t.Fatalf("end: %+v", st)
+	}
+}

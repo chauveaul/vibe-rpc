@@ -53,7 +53,7 @@ struct LimitAlert: Equatable, Identifiable {
     enum Kind: Equatable { case limit, finished, limitReset }
 
     let id: String
-    let source: String   // "claude" | "antigravity" | "opencode" | "codex"
+    let source: String   // "claude" | "antigravity" | "opencode" | "codex" | "copilot"
     let title: String
     let subtitle: String
     let threshold: Int   // 90 | 95 | 100 (limit only)

@@ -125,7 +125,7 @@ func main() {
 	}
 
 	// setup / install
-	var noAutostart, noClaude, noOpenCode, noCodex bool
+	var noAutostart, noClaude, noOpenCode, noCodex, noCopilot bool
 	var agentsFlag string
 	setupCmd := &cobra.Command{
 		Use:     "setup",
@@ -178,6 +178,15 @@ func main() {
 					fmt.Printf("  · Codex hooks already up to date in %s\n", install.CodexHooksPath())
 				}
 			}
+			if !noCopilot && tracked["copilot"] {
+				if changed, err := install.InstallCopilotHooks(""); err != nil {
+					fmt.Printf("  ! Copilot hooks: %v\n", err)
+				} else if changed {
+					fmt.Printf("  ✓ wired Copilot CLI hooks in %s (applies to Copilot sessions started from now on)\n", install.CopilotHooksPath())
+				} else {
+					fmt.Printf("  · Copilot CLI hooks already up to date in %s\n", install.CopilotHooksPath())
+				}
+			}
 			if !noOpenCode && tracked["opencode"] && scanner.OpenCodeBinary() != "" {
 				if changed, err := install.InstallOpenCodePlugin(""); err != nil {
 					fmt.Printf("  ! OpenCode plugin: %v\n", err)
@@ -221,7 +230,8 @@ func main() {
 	setupCmd.Flags().BoolVar(&noClaude, "no-claude", false, "Skip wiring Claude Code hooks")
 	setupCmd.Flags().BoolVar(&noOpenCode, "no-opencode", false, "Skip installing the OpenCode plugin")
 	setupCmd.Flags().BoolVar(&noCodex, "no-codex", false, "Skip wiring Codex hooks")
-	setupCmd.Flags().StringVar(&agentsFlag, "agents", "", "Agents to track, comma-separated: antigravity,claude,opencode,codex (or \"all\"); asks interactively if omitted")
+	setupCmd.Flags().BoolVar(&noCopilot, "no-copilot", false, "Skip wiring Copilot CLI hooks")
+	setupCmd.Flags().StringVar(&agentsFlag, "agents", "", "Agents to track, comma-separated: antigravity,claude,opencode,codex,copilot (or \"all\"); asks interactively if omitted")
 
 	// uninstall
 	uninstallCmd := &cobra.Command{
@@ -243,6 +253,9 @@ func main() {
 			notch.Quit()
 			if ok, _ := install.UninstallCodexHooks(); ok {
 				fmt.Println("✓ Removed vibe-rpc's Codex hooks")
+			}
+			if ok, _ := install.UninstallCopilotHooks(); ok {
+				fmt.Println("✓ Removed vibe-rpc's Copilot CLI hooks")
 			}
 			if ok, _ := install.UninstallOpenCodePlugin(); ok {
 				fmt.Println("✓ Removed the OpenCode plugin")
@@ -1154,9 +1167,11 @@ func chooseAgents(flag string, in *os.File, out io.Writer) (map[string]bool, err
 				k = "antigravity"
 			case "claude-code", "claudecode":
 				k = "claude"
+			case "copilot-cli", "github-copilot":
+				k = "copilot"
 			}
 			if !slices.Contains(config.Agents, k) {
-				return nil, fmt.Errorf("unknown agent %q (use antigravity, claude, opencode, codex)", k)
+				return nil, fmt.Errorf("unknown agent %q (use antigravity, claude, opencode, codex, copilot)", k)
 			}
 			tracked[k] = true
 		}
@@ -1221,6 +1236,7 @@ func saveTrackedAgents(tracked map[string]bool) error {
 		Claude:      config.BoolPtr(tracked["claude"]),
 		OpenCode:    config.BoolPtr(tracked["opencode"]),
 		Codex:       config.BoolPtr(tracked["codex"]),
+		Copilot:     config.BoolPtr(tracked["copilot"]),
 	}
 	_, err := config.SaveDiff(paths.ConfigPath(), base, edited)
 	return err

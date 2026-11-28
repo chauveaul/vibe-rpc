@@ -396,6 +396,7 @@ func listFinished(cfg config.Config, now time.Time) []notchFinished {
 		IncludeClaude:      cfg.Sources.WantClaude(),
 		IncludeOpenCode:    cfg.Sources.WantOpenCode(),
 		IncludeCodex:       cfg.Sources.WantCodex(),
+		IncludeCopilot:     cfg.Sources.WantCopilot(),
 		IncludeClaudeRPC:   true,
 	}) {
 		if s.LastStop == 0 || s.Status != "idle" || s.AgentClosed {
@@ -434,6 +435,7 @@ func listAttention(cfg config.Config, now time.Time) []notchAttention {
 		IncludeClaude:      cfg.Sources.WantClaude(),
 		IncludeOpenCode:    cfg.Sources.WantOpenCode(),
 		IncludeCodex:       cfg.Sources.WantCodex(),
+		IncludeCopilot:     cfg.Sources.WantCopilot(),
 		IncludeClaudeRPC:   true,
 	}) {
 		if s.Status != "notification" || s.AgentClosed || s.ClaudeClosed {

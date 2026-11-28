@@ -258,6 +258,31 @@
             </div>
           </div>
           {{end}}
+
+          {{if .ShowCopilotGifs}}
+          <div class="gif-panel">
+            <div class="gif-panel-head">
+              <div class="gif-panel-thumb">{{if .CopilotStatusImage}}<img src="{{.CopilotStatusImage}}" alt="Copilot GIF">{{end}}</div>
+              <div>
+                <div class="gif-panel-title">Copilot</div>
+                <div class="gif-panel-sub">Shown for Copilot CLI sessions</div>
+              </div>
+            </div>
+            <label class="field">
+              GIF URL or asset key
+              <input type="text" name="copilot_status_image" value="{{.CopilotStatusImage}}" placeholder="/assets/gifs/copilot-working.gif or https://...">
+            </label>
+            <div class="gif-gallery compact">
+              {{range .BuiltinCopilotGifs}}
+                <div class="gif-tile {{if .Active}}active{{end}}">
+                  <img src="{{.Path}}" alt="{{.Label}}">
+                  <div class="g-name">{{.Label}}</div>
+                  <button type="submit" formaction="/settings/gif/pick" name="gif_pick" value="copilot:{{.Path}}">{{if .Active}}Active{{else}}Use{{end}}</button>
+                </div>
+              {{end}}
+            </div>
+          </div>
+          {{end}}
         </div>
         {{end}}
 

@@ -2,7 +2,7 @@
 
 <h1 align="center">vibe-rpc</h1>
 
-<p align="center">Discord Rich Presence and local coding stats for Antigravity, Claude Code, OpenCode and Codex.</p>
+<p align="center">Discord Rich Presence and local coding stats for Antigravity, Claude Code, OpenCode, Codex and GitHub Copilot CLI.</p>
 
 <p align="center">
   <a href="https://github.com/chauveaul/vibe-rpc/actions/workflows/ci.yml"><img src="https://github.com/chauveaul/vibe-rpc/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -36,7 +36,7 @@ It is a single binary for macOS, Linux and Windows.
 ## Requirements
 
 - The Discord desktop app, or Vesktop / arRPC, running on the same machine.
-- At least one supported agent: [Antigravity](https://antigravity.google), [Claude Code](https://claude.com/claude-code), [OpenCode](https://opencode.ai) or [Codex CLI](https://developers.openai.com/codex).
+- At least one supported agent: [Antigravity](https://antigravity.google), [Claude Code](https://claude.com/claude-code), [OpenCode](https://opencode.ai), [Codex CLI](https://developers.openai.com/codex) or [GitHub Copilot CLI](https://github.com/features/copilot/cli).
 - VibeNotch only: macOS 14 or later.
 
 ## Install
@@ -91,12 +91,12 @@ vibe-rpc setup
 Setup lists the agents it finds on your machine and asks which to track. Pass `--agents claude,codex` (or `all`) to skip the question. It then:
 
 1. writes a default config,
-2. adds hooks to each agent you picked (Antigravity: `~/.gemini/config/hooks.json`, Claude Code: `~/.claude/settings.json`, Codex: `~/.codex/hooks.json`, OpenCode: a plugin in `~/.config/opencode/plugin/`),
+2. adds hooks to each agent you picked (Antigravity: `~/.gemini/config/hooks.json`, Claude Code: `~/.claude/settings.json`, Codex: `~/.codex/hooks.json`, Copilot CLI: its own file, `~/.copilot/hooks/vibe-rpc.json`, OpenCode: a plugin in `~/.config/opencode/plugin/`),
 3. registers vibe-rpc to start at login,
 4. scans your existing transcripts,
 5. starts the background daemon.
 
-Your existing hooks are kept. Codex asks you to trust new hooks the first time it runs them.
+Your existing hooks are kept. Codex asks you to trust new hooks the first time it runs them. Copilot CLI picks up its hooks in sessions started after setup.
 
 Start a session in one of your agents and it appears on your Discord profile. Run `vibe-rpc settings` to customise the card, or `vibe-rpc doctor` if nothing shows up.
 
@@ -158,6 +158,7 @@ Claude Code and Antigravity CLI only report plan limits to their status line. To
 
 - **OpenCode** history is read with `opencode db`.
 - **Codex** history is read from `~/.codex/sessions`. Codex does not record cost, so its API-equivalent cost shows as $0.
+- **Copilot CLI** history is read from `~/.copilot/session-state` (`$COPILOT_HOME` if set). Copilot bills premium requests rather than tokens, so its cost shows as $0. Input and cache tokens are only recorded when a session exits normally; output tokens are always counted.
 
 ## VibeNotch (macOS)
 

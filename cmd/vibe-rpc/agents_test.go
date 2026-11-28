@@ -9,15 +9,15 @@ import (
 )
 
 func TestChooseAgentsFlag(t *testing.T) {
-	got, err := chooseAgents("agy, opencode", os.Stdin, io.Discard)
-	if err != nil || !got["antigravity"] || !got["opencode"] || got["claude"] {
+	got, err := chooseAgents("agy, opencode, copilot-cli", os.Stdin, io.Discard)
+	if err != nil || !got["antigravity"] || !got["opencode"] || !got["copilot"] || got["claude"] {
 		t.Fatalf("got %v, %v", got, err)
 	}
 	if _, err := chooseAgents("cursor", os.Stdin, io.Discard); err == nil {
 		t.Fatal("unknown agents should error")
 	}
 	all, _ := chooseAgents("all", os.Stdin, io.Discard)
-	if len(all) != 4 {
+	if len(all) != 5 {
 		t.Fatalf("all = %v", all)
 	}
 }
@@ -28,13 +28,13 @@ func TestSaveTrackedAgentsPersistsCodex(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := config.Load().Sources
-	if s.Tracks("codex") || s.Tracks("opencode") || !s.Tracks("claude") {
+	if s.Tracks("codex") || s.Tracks("copilot") || s.Tracks("opencode") || !s.Tracks("claude") {
 		t.Fatalf("unticked agents should stay untracked, got %+v", s)
 	}
-	if err := saveTrackedAgents(map[string]bool{"codex": true}); err != nil {
+	if err := saveTrackedAgents(map[string]bool{"codex": true, "copilot": true}); err != nil {
 		t.Fatal(err)
 	}
-	if s := config.Load().Sources; !s.Tracks("codex") || s.Tracks("claude") {
+	if s := config.Load().Sources; !s.Tracks("codex") || !s.Tracks("copilot") || s.Tracks("claude") {
 		t.Fatalf("re-picking codex should track it, got %+v", s)
 	}
 }

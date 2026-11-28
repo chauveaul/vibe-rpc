@@ -16,6 +16,7 @@ type SourcesConfig struct {
 	Claude      *bool `json:"claude,omitempty"`
 	OpenCode    *bool `json:"opencode,omitempty"`
 	Codex       *bool `json:"codex,omitempty"`
+	Copilot     *bool `json:"copilot,omitempty"`
 }
 
 func (s SourcesConfig) WantAntigravity() bool {
@@ -34,8 +35,12 @@ func (s SourcesConfig) WantCodex() bool {
 	return s.Codex == nil || *s.Codex
 }
 
+func (s SourcesConfig) WantCopilot() bool {
+	return s.Copilot == nil || *s.Copilot
+}
+
 // Agents are the coding agents vibe-rpc knows, in display order.
-var Agents = []string{"antigravity", "claude", "opencode", "codex"}
+var Agents = []string{"antigravity", "claude", "opencode", "codex", "copilot"}
 
 // AgentName is an agent's display name.
 func AgentName(key string) string {
@@ -46,6 +51,8 @@ func AgentName(key string) string {
 		return "OpenCode"
 	case "codex":
 		return "Codex"
+	case "copilot":
+		return "Copilot"
 	}
 	return "Antigravity"
 }
@@ -76,6 +83,8 @@ func (s SourcesConfig) Tracks(agent string) bool {
 		return s.WantOpenCode()
 	case "codex":
 		return s.WantCodex()
+	case "copilot":
+		return s.WantCopilot()
 	}
 	return s.WantAntigravity()
 }
@@ -87,6 +96,7 @@ type DiscordSourcesConfig struct {
 	Claude      *bool `json:"claude,omitempty"`
 	OpenCode    *bool `json:"opencode,omitempty"`
 	Codex       *bool `json:"codex,omitempty"`
+	Copilot     *bool `json:"copilot,omitempty"`
 }
 
 func (d DiscordSourcesConfig) allows(agent string) bool {
@@ -98,6 +108,8 @@ func (d DiscordSourcesConfig) allows(agent string) bool {
 		b = d.OpenCode
 	case "codex":
 		b = d.Codex
+	case "copilot":
+		b = d.Copilot
 	default:
 		b = d.Antigravity
 	}
@@ -259,9 +271,11 @@ type Config struct {
 	OpenCodeStatusAssets map[string]string `json:"openCodeStatusAssets,omitempty"`
 	// CodexStatusAssets is the status art for Codex sessions.
 	CodexStatusAssets map[string]string `json:"codexStatusAssets,omitempty"`
-	ModelAssets       map[string]string `json:"modelAssets,omitempty"`
-	Presence          PresenceConfig    `json:"presence"`
-	StatusIcons       map[string]string `json:"statusIcons"`
+	// CopilotStatusAssets is the status art for Copilot CLI sessions.
+	CopilotStatusAssets map[string]string `json:"copilotStatusAssets,omitempty"`
+	ModelAssets         map[string]string `json:"modelAssets,omitempty"`
+	Presence            PresenceConfig    `json:"presence"`
+	StatusIcons         map[string]string `json:"statusIcons"`
 }
 
 func BoolPtr(v bool) *bool { return &v }
@@ -365,6 +379,15 @@ func Default() Config {
 			"idle":         "/assets/gifs/codex-idle.gif",
 			"stale":        "/assets/gifs/codex-stale.gif",
 			"notification": "/assets/gifs/codex-notification.gif",
+		},
+		CopilotStatusAssets: map[string]string{
+			"working":      "/assets/gifs/copilot-working.gif",
+			"thinking":     "/assets/gifs/copilot-thinking.gif",
+			"compacting":   "/assets/gifs/copilot-compacting.gif",
+			"shipped":      "/assets/gifs/copilot-shipped.gif",
+			"idle":         "/assets/gifs/copilot-idle.gif",
+			"stale":        "/assets/gifs/copilot-stale.gif",
+			"notification": "/assets/gifs/copilot-notification.gif",
 		},
 		Presence: PresenceConfig{
 			LargeImageKey:  "/assets/gifs/agy-idle.gif",

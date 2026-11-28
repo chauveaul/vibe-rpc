@@ -68,6 +68,7 @@ func loadSnapshot() (config.Config, *scanner.Aggregate, state.SessionState, int,
 		IncludeClaude:      cfg.Sources.WantClaude(),
 		IncludeOpenCode:    cfg.Sources.WantOpenCode(),
 		IncludeCodex:       cfg.Sources.WantCodex(),
+		IncludeCopilot:     cfg.Sources.WantCopilot(),
 		IncludeClaudeRPC:   true,
 	})
 	idleMs := int64(cfg.IdleThresholdSec) * 1000
@@ -488,6 +489,10 @@ func (m model) viewLifetime() string {
 	if cx := m.agg.BySource["codex"]; cx != nil && cx.Sessions > 0 {
 		lines = append(lines, fmt.Sprintf("  Codex       : %d sessions · %s · %s tokens",
 			cx.Sessions, format.FmtHours(cx.ActiveMs), format.FmtNum(cx.Tokens)))
+	}
+	if cp := m.agg.BySource["copilot"]; cp != nil && cp.Sessions > 0 {
+		lines = append(lines, fmt.Sprintf("  Copilot     : %d sessions · %s · %s tokens",
+			cp.Sessions, format.FmtHours(cp.ActiveMs), format.FmtNum(cp.Tokens)))
 	}
 	lines = append(lines, fmt.Sprintf("  Dual wield  : %s running two or more agents simultaneously", styleVal.Render(format.FmtHours(dualMs))))
 	return strings.Join(lines, "\n")

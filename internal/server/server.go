@@ -79,6 +79,13 @@ var BuiltinGifs = []struct {
 	{"notification", "codex", "Waiting", "codex-notification.gif"},
 	{"idle", "codex", "Idle", "codex-idle.gif"},
 	{"stale", "codex", "Away", "codex-stale.gif"},
+	{"working", "copilot", "Working", "copilot-working.gif"},
+	{"thinking", "copilot", "Thinking", "copilot-thinking.gif"},
+	{"compacting", "copilot", "Compacting", "copilot-compacting.gif"},
+	{"shipped", "copilot", "Shipped", "copilot-shipped.gif"},
+	{"notification", "copilot", "Waiting", "copilot-notification.gif"},
+	{"idle", "copilot", "Idle", "copilot-idle.gif"},
+	{"stale", "copilot", "Away", "copilot-stale.gif"},
 }
 
 // ExportGifs writes all embedded Antigravity animated GIFs to dir.
@@ -1097,7 +1104,11 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 	if cfg.CodexStatusAssets != nil {
 		curCXImg = cfg.CodexStatusAssets[selStatus]
 	}
-	var agyGifs, claudeGifs, ocGifs, cxGifs, dualGifs []gifView
+	curCPImg := ""
+	if cfg.CopilotStatusAssets != nil {
+		curCPImg = cfg.CopilotStatusAssets[selStatus]
+	}
+	var agyGifs, claudeGifs, ocGifs, cxGifs, cpGifs, dualGifs []gifView
 	for _, g := range BuiltinGifs {
 		p := "/assets/gifs/" + g.File
 		switch g.Group {
@@ -1110,6 +1121,8 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 			ocGifs = append(ocGifs, gifView{Label: g.Label, Path: p, Active: curOCImg == p})
 		case "codex":
 			cxGifs = append(cxGifs, gifView{Label: g.Label, Path: p, Active: curCXImg == p})
+		case "copilot":
+			cpGifs = append(cpGifs, gifView{Label: g.Label, Path: p, Active: curCPImg == p})
 		case "dual":
 			// Place Dual Wielding GIF first in the Dual gallery
 			dualGifs = append([]gifView{{Label: "Dual Wield", Path: p, Active: curImg == p}}, dualGifs...)
@@ -1185,6 +1198,9 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 		"BuiltinCodexGifs":    cxGifs,
 		"CodexStatusImage":    curCXImg,
 		"ShowCodexGifs":       cfg.Sources.Tracks("codex"),
+		"BuiltinCopilotGifs":  cpGifs,
+		"CopilotStatusImage":  curCPImg,
+		"ShowCopilotGifs":     cfg.Sources.Tracks("copilot"),
 		"OpenCodeStatusImage": curOCImg,
 		"ShowOpenCodeGifs":    cfg.Sources.Tracks("opencode"),
 		"DualGifs":            dualGifs,
@@ -1244,6 +1260,12 @@ func parseSettingsForm(r *http.Request, base config.Config) (config.Config, stri
 		}
 		edited.CodexStatusAssets[selStatus] = xImg
 	}
+	if pImg := strings.TrimSpace(r.FormValue("copilot_status_image")); pImg != "" && selStatus != "dual" {
+		if edited.CopilotStatusAssets == nil {
+			edited.CopilotStatusAssets = map[string]string{}
+		}
+		edited.CopilotStatusAssets[selStatus] = pImg
+	}
 	if oImg := strings.TrimSpace(r.FormValue("opencode_status_image")); oImg != "" && selStatus != "dual" {
 		if edited.OpenCodeStatusAssets == nil {
 			edited.OpenCodeStatusAssets = map[string]string{}
@@ -1293,8 +1315,8 @@ func parseSettingsForm(r *http.Request, base config.Config) (config.Config, stri
 	edited.Presence.GithubButton = config.BoolPtr(r.FormValue("githubButton") == "on")
 	if r.FormValue("agents_section") == "1" {
 		on := func(k string) *bool { return config.BoolPtr(r.FormValue(k) == "on") }
-		edited.Sources = config.SourcesConfig{Antigravity: on("track_antigravity"), Claude: on("track_claude"), OpenCode: on("track_opencode"), Codex: on("track_codex")}
-		edited.DiscordSources = config.DiscordSourcesConfig{Antigravity: on("discord_antigravity"), Claude: on("discord_claude"), OpenCode: on("discord_opencode"), Codex: on("discord_codex")}
+		edited.Sources = config.SourcesConfig{Antigravity: on("track_antigravity"), Claude: on("track_claude"), OpenCode: on("track_opencode"), Codex: on("track_codex"), Copilot: on("track_copilot")}
+		edited.DiscordSources = config.DiscordSourcesConfig{Antigravity: on("discord_antigravity"), Claude: on("discord_claude"), OpenCode: on("discord_opencode"), Codex: on("discord_codex"), Copilot: on("discord_copilot")}
 	} else if r.FormValue("sourceAntigravity") != "" || r.FormValue("sourceClaude") != "" || r.FormValue("sourceOpenCode") != "" {
 		// Older forms with plain "Track …" checkboxes.
 		edited.Sources = config.SourcesConfig{
@@ -1509,6 +1531,11 @@ func handleSettingsGifPick(w http.ResponseWriter, r *http.Request) {
 					edited.CodexStatusAssets = map[string]string{}
 				}
 				edited.CodexStatusAssets[selStatus] = gifPath
+			} else if target == "copilot" && selStatus != "dual" {
+				if edited.CopilotStatusAssets == nil {
+					edited.CopilotStatusAssets = map[string]string{}
+				}
+				edited.CopilotStatusAssets[selStatus] = gifPath
 			} else if target == "opencode" && selStatus != "dual" {
 				if edited.OpenCodeStatusAssets == nil {
 					edited.OpenCodeStatusAssets = map[string]string{}

@@ -13,7 +13,7 @@ import (
 
 // Agent is one coding agent and where (if anywhere) it was found.
 type Agent struct {
-	Key       string // antigravity | claude | opencode
+	Key       string // antigravity | claude | opencode | codex | copilot
 	Name      string
 	Installed bool
 	Where     string // what was found, for display
@@ -83,6 +83,8 @@ func find(key string) string {
 			return app
 		}
 		return firstExisting("/opt/homebrew/bin/codex", "/usr/local/bin/codex", CodexHome())
+	case "copilot":
+		return CopilotBinary()
 	default: // antigravity
 		app := ""
 		if runtime.GOOS == "darwin" {
@@ -114,4 +116,28 @@ func CodexHome() string {
 		return d
 	}
 	return filepath.Join(home(), ".codex")
+}
+
+// CopilotHome is GitHub Copilot CLI's data dir ($COPILOT_HOME, default
+// ~/.copilot).
+func CopilotHome() string {
+	if d := os.Getenv("COPILOT_HOME"); d != "" {
+		return d
+	}
+	return filepath.Join(home(), ".copilot")
+}
+
+// CopilotBinary finds the GitHub Copilot CLI, or "" if it isn't installed.
+// ~/.copilot alone doesn't count: Copilot in VS Code creates it too.
+func CopilotBinary() string {
+	if p := onPath("copilot"); p != "" {
+		return p
+	}
+	h := home()
+	return firstExisting(
+		"/opt/homebrew/bin/copilot",
+		"/usr/local/bin/copilot",
+		filepath.Join(h, ".local", "bin", "copilot"),
+		filepath.Join(h, ".npm-global", "bin", "copilot"),
+	)
 }

@@ -228,6 +228,7 @@ type ListOptions struct {
 	IncludeClaude      bool
 	IncludeOpenCode    bool
 	IncludeCodex       bool
+	IncludeCopilot     bool
 	IncludeClaudeRPC   bool
 	StateDir           string
 	ClaudeStateDir     string
@@ -283,6 +284,10 @@ func ListSessions(opts ListOptions) []SessionState {
 			}
 		case "codex":
 			if !opts.IncludeCodex {
+				continue
+			}
+		case "copilot":
+			if !opts.IncludeCopilot {
 				continue
 			}
 		default:

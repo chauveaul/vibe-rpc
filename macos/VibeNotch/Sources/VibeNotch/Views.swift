@@ -860,6 +860,7 @@ struct AgentLogo: View {
         case "claude": return "Claude Code"
         case "opencode": return "OpenCode"
         case "codex": return "Codex"
+        case "copilot": return "Copilot"
         default: return "Antigravity"
         }
     }
@@ -868,6 +869,11 @@ struct AgentLogo: View {
         if let img = cache[source] { return img }
         if source == "codex" {
             let result = codexImage()
+            cache[source] = result
+            return result
+        }
+        if source == "copilot" {
+            let result = copilotImage()
             cache[source] = result
             return result
         }
@@ -914,6 +920,22 @@ extension AgentLogo {
 }
 
 extension AgentLogo {
+    /// Copilot CLI runs in a terminal, so there's no app icon: a slate tile
+    /// with an airplane (original art, not GitHub's mark).
+    static func copilotImage() -> NSImage {
+        let size = NSSize(width: 64, height: 64)
+        return NSImage(size: size, flipped: false) { rect in
+            NSColor(red: 0.13, green: 0.16, blue: 0.21, alpha: 1).setFill()
+            NSBezierPath(roundedRect: rect, xRadius: 14, yRadius: 14).fill()
+            if let sym = NSImage(systemSymbolName: "airplane", accessibilityDescription: "Copilot"),
+               let tinted = sym.withSymbolConfiguration(.init(pointSize: 26, weight: .bold).applying(.init(paletteColors: [.white]))) {
+                let sz = tinted.size
+                tinted.draw(in: NSRect(x: (rect.width - sz.width) / 2, y: (rect.height - sz.height) / 2, width: sz.width, height: sz.height))
+            }
+            return true
+        }
+    }
+
     /// Codex: the desktop app's icon if installed, otherwise a "{ }" tile.
     static func codexImage() -> NSImage {
         for id in ["com.openai.codex", "com.openai.chatgpt.codex"] {

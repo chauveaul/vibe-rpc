@@ -165,6 +165,8 @@ func HumanModel(id string) string {
 		return "Claude"
 	case "codex":
 		return "Codex"
+	case "copilot":
+		return "Copilot"
 	case "opencode":
 		return "OpenCode"
 	case "flash_lite", "flash-lite":
@@ -541,6 +543,9 @@ func BuildVars(st state.SessionState, cfg config.Config, agg *scanner.Aggregate)
 	case "codex":
 		source = "codex"
 		sourcePretty = "Codex"
+	case "copilot":
+		source = "copilot"
+		sourcePretty = "Copilot"
 	case "opencode":
 		source = "opencode"
 		sourcePretty = "OpenCode"
@@ -554,7 +559,7 @@ func BuildVars(st state.SessionState, cfg config.Config, agg *scanner.Aggregate)
 	}
 	for _, ls := range st.LiveSessions {
 		switch ls.Source {
-		case "claude", "opencode", "codex":
+		case "claude", "opencode", "codex", "copilot":
 			liveSrcs[ls.Source] = true
 		default:
 			liveSrcs["antigravity"] = true

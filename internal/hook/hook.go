@@ -39,31 +39,34 @@ type Payload struct {
 	TerminationReason     string   `json:"terminationReason"`
 
 	// Claude Code fields (snake_case)
-	SessionIDSnake      string         `json:"session_id"`
-	SessionIDCamel      string         `json:"sessionId"`
-	TranscriptPathSnake string         `json:"transcript_path"`
-	Cwd                 string         `json:"cwd"`
-	Source              string         `json:"source"`
-	ToolNameSnake       string         `json:"tool_name"`
-	ToolNameCamel       string         `json:"toolName"`
-	ToolInputSnake      map[string]any `json:"tool_input"`
-	ToolInputCamel      map[string]any `json:"toolInput"`
-	Trigger             string         `json:"trigger"`
-	Message             string         `json:"message"`           // Notification
-	NotificationType    string         `json:"notification_type"` // Notification: permission_prompt | idle_prompt | …
-	Matcher             string         `json:"matcher"`
-	ModelRaw            any            `json:"model"`
+	SessionIDSnake      string `json:"session_id"`
+	SessionIDCamel      string `json:"sessionId"`
+	TranscriptPathSnake string `json:"transcript_path"`
+	Cwd                 string `json:"cwd"`
+	Source              string `json:"source"`
+	ToolNameSnake       string `json:"tool_name"`
+	ToolNameCamel       string `json:"toolName"`
+	ToolInputSnake      any    `json:"tool_input"` // object, or a string (Copilot's apply_patch)
+	ToolInputCamel      any    `json:"toolInput"`
+	ToolArgsCamel       any    `json:"toolArgs"` // Copilot's camelCase payload
+	Trigger             string `json:"trigger"`
+	Message             string `json:"message"`           // Notification
+	NotificationType    string `json:"notification_type"` // Notification: permission_prompt | idle_prompt | …
+	Matcher             string `json:"matcher"`
+	ModelRaw            any    `json:"model"`
 }
 
 var (
 	readTools = map[string]bool{
 		"read_file": true, "view_file": true, "view_file_outline": true,
 		"view_code_item": true, "Read": true, "NotebookEdit": true,
+		"view": true, // Copilot CLI
 	}
 	editTools = map[string]bool{
 		"write_file": true, "edit_file": true, "replace_file_content": true,
 		"multi_replace_file_content": true, "write_to_file": true,
 		"Write": true, "Edit": true, "MultiEdit": true, "NotebookEdit": true,
+		"edit": true, "create": true, // Copilot CLI
 	}
 )
 
@@ -137,16 +140,35 @@ func extractTool(in Payload) (string, map[string]any) {
 		name = "tool"
 	}
 	args := in.ToolCall.Args
-	if args == nil {
-		args = in.ToolInputSnake
-	}
-	if args == nil {
-		args = in.ToolInputCamel
+	for _, raw := range []any{in.ToolInputSnake, in.ToolInputCamel, in.ToolArgsCamel} {
+		if args != nil {
+			break
+		}
+		args = toolArgsMap(raw)
 	}
 	if args == nil {
 		args = map[string]any{}
 	}
 	return name, args
+}
+
+// toolArgsMap reads tool input given as an object, as a JSON-encoded object,
+// or as a bare string (Copilot's apply_patch body), which becomes "input".
+func toolArgsMap(raw any) map[string]any {
+	switch v := raw.(type) {
+	case map[string]any:
+		return v
+	case string:
+		if v == "" {
+			return nil
+		}
+		var m map[string]any
+		if json.Unmarshal([]byte(v), &m) == nil && m != nil {
+			return m
+		}
+		return map[string]any{"input": v}
+	}
+	return nil
 }
 
 func strArg(m map[string]any, keys ...string) string {
@@ -176,7 +198,8 @@ func OutputFor(event, source string) map[string]any {
 	}
 	// Codex reads decisions from hook output (an "allow" could skip its
 	// approval prompt), and OpenCode's plugin ignores output: stay a no-op.
-	if source == "codex" || source == "opencode" {
+	// Copilot CLI reads permissionDecision from PreToolUse output: same.
+	if source == "codex" || source == "opencode" || source == "copilot" {
 		return map[string]any{}
 	}
 	if event == "PreToolUse" {
@@ -335,7 +358,8 @@ func ProcessEvent(event string, in Payload, nowMs int64, explicitSource string) 
 			shellCmd = strArg(toolArgs, "CommandLine", "command")
 		}
 		// Antigravity's ask_question, Claude Code's AskUserQuestion, OpenCode's question.
-		isAsk := toolName == "ask_question" || toolName == "AskUserQuestion" || (toolName == "question" && source == "opencode")
+		// Copilot CLI's ask_user.
+		isAsk := toolName == "ask_question" || toolName == "AskUserQuestion" || (toolName == "question" && source == "opencode") || (toolName == "ask_user" && source == "copilot")
 		askText := ""
 		if isAsk {
 			askText = questionText(toolArgs)
@@ -380,7 +404,7 @@ func ProcessEvent(event string, in Payload, nowMs int64, explicitSource string) 
 			}
 			if file != "" && readTools[toolName] {
 				s.FilesOpened = state.PushUnique(s.FilesOpened, file, 50)
-				if toolName == "read_file" || toolName == "view_file" || toolName == "Read" {
+				if toolName == "read_file" || toolName == "view_file" || toolName == "Read" || toolName == "view" {
 					s.FilesRead = state.PushUnique(s.FilesRead, file, 50)
 				}
 			}
@@ -436,6 +460,12 @@ func ProcessEvent(event string, in Payload, nowMs int64, explicitSource string) 
 
 	case "Notification":
 		kind, text := attentionFromNotification(in.NotificationType, in.Message)
+		if source == "copilot" {
+			kind, text = copilotAttention(in.NotificationType, in.Message)
+			if kind == "idle" { // shell finished, agent idle…: Stop covers the turn ending
+				break
+			}
+		}
 		update(func(s *state.SessionState, _ bool) {
 			// Claude Code follows a question with a generic "needs your
 			// permission" notification; keep the more useful question text.
@@ -572,10 +602,11 @@ func ProcessEvent(event string, in Payload, nowMs int64, explicitSource string) 
 }
 
 // placeholderModel stands in until an agent reports its model: the agent's
-// own name ("Claude", "Codex", "OpenCode"), or Gemini for Antigravity.
+// own name ("Claude", "Codex", "OpenCode", "Copilot"), or Gemini for
+// Antigravity.
 func placeholderModel(source string) string {
 	switch source {
-	case "claude", "codex", "opencode":
+	case "claude", "codex", "opencode", "copilot":
 		return source
 	}
 	return "gemini"
@@ -636,6 +667,27 @@ func attentionFromNotification(typ, msg string) (string, string) {
 		}
 		return "question", msg
 	}
+}
+
+// copilotAttention classifies Copilot CLI's notification hook. It also fires
+// for finished shell commands and agents going idle, so only permission and
+// input prompts raise the notch; ProcessEvent ignores the rest ("idle").
+func copilotAttention(typ, msg string) (string, string) {
+	msg = strings.TrimSpace(msg)
+	t := strings.ToLower(typ)
+	switch {
+	case strings.Contains(t, "permission"):
+		if msg == "" {
+			msg = "Copilot needs your permission"
+		}
+		return "permission", msg
+	case strings.Contains(t, "elicitation") || strings.Contains(t, "input") || strings.Contains(t, "question"):
+		if msg == "" {
+			msg = "Needs your input"
+		}
+		return "question", msg
+	}
+	return "idle", msg
 }
 
 // questionText pulls the question out of Antigravity's ask_question args or

@@ -29,7 +29,7 @@ It is a single binary for macOS, Linux and Windows.
 - **Local dashboard** at `http://127.0.0.1:47475` with time ranges, a 12-month heatmap, an agent-by-agent comparison, model cost split, languages and leaderboards.
 - **Settings editor** in the browser for card text, GIFs, goals, a monthly budget, a webhook and command triggers. Changes apply without restarting.
 - **Terminal UI** (`vibe-rpc`) with seven tabs: Now, Today, Week, Streak, Lifetime, Cost and Code.
-- **VibeNotch** (macOS), a status panel in the MacBook notch with usage-limit bars and permission prompts.
+- **VibeNotch** (macOS), a status panel in the MacBook notch with usage-limit bars, reset notifications and permission prompts.
 
 <p align="center"><img src="./assets/screenshots/dashboard-agents.png" width="880" alt="Usage quotas for Claude Code and Antigravity, and a side-by-side comparison of Antigravity, Claude Code, OpenCode and Codex"></p>
 
@@ -173,9 +173,13 @@ When an agent asks for permission or asks you a question, the panel drops down w
 
 <p align="center"><img src="./assets/screenshots/notch-alerts.png" width="458" alt="VibeNotch alerts: Codex and Claude Code each waiting for permission in the vibe-rpc project"></p>
 
-It also warns you when a plan limit reaches 90 %, 95 % and 100 %, and notifies you when a 5-hour or weekly limit resets (including resets that happened while your Mac was asleep or off, shown when you wake it). You can turn limit-reset banners off in Settings:
+It also warns you when a plan limit reaches 90 %, 95 % and 100 %:
 
 <p align="center"><img src="./assets/screenshots/notch-limit.png" width="438" alt="VibeNotch alert: Antigravity 5-hour limit at 95 percent, with the reset time"></p>
+
+When a 5-hour or weekly plan limit resets after non-zero usage, a green banner lets you know it's ready again — including resets that happened overnight while your Mac was asleep or off, shown when you wake and unlock it. You can turn it off in Settings:
+
+<p align="center"><img src="./assets/screenshots/notch-limit-reset.png" width="438" alt="VibeNotch banner: Claude 5-hour limit reset, 5-hour window ready to use, 0 percent"></p>
 
 When an agent finishes a turn that ran for 10 seconds or more, a short banner says so for a few seconds, unless you're already in that agent's terminal or editor. You can turn it off in Settings:
 
